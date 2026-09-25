@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 # SPEC §4).
 _PLACEHOLDER_MODELS = {"kimchi-acp", "copilot-acp"}
 
-# Kimchi's session/new advertises these pseudo-entries alongside real model
-# ids (SPEC F15); they must not surface in Hermes' /model picker.
-_PSEUDO_MODELS = {"auto", "multi-model"}
+# Kimchi's session model ids arrive provider-prefixed (live: "kimchi-dev/...",
+# "openai-codex/..."). NO content filtering: `auto` is the harness's router
+# mode and `auto-beta` a real model (user decision 2026-09-25, SPEC F15).
 
 # Longest-first so combined env-var mentions rebrand before their parts.
 _REBRAND_RULES = (
@@ -49,20 +49,19 @@ def _rebrand(message: str) -> str:
     return message
 
 
-def _filter_pseudo_models(models):
-    """Drop Kimchi's pseudo-entries and duplicates from an advertised list.
+def _dedupe_models(models):
+    """Order-preserving de-duplication of the advertised model ids.
 
-    Session ids arrive provider-prefixed (live: ``kimchi-dev/auto``), so the
-    pseudo check runs on the path leaf. ``auto-beta`` is a real selectable
-    model and stays.
+    Deliberately no content filtering: every id comes from the harness's own
+    advertised config options — `auto` is the harness's router mode,
+    `auto-beta` a real model (user decision 2026-09-25, SPEC F15).
     """
     if not models:
         return None
     seen, out = set(), []
     for model in models:
         model_id = str(model).strip()
-        leaf = model_id.rsplit("/", 1)[-1].strip().lower()
-        if not model_id or leaf in _PSEUDO_MODELS or model_id in seen:
+        if not model_id or model_id in seen:
             continue
         seen.add(model_id)
         out.append(model_id)
@@ -151,7 +150,7 @@ class KimchiACPProfile(ProviderProfile):
         except Exception as exc:
             logger.debug("kimchi-acp fetch_models: %s", exc)
             return None
-        return _filter_pseudo_models(models)
+        return _dedupe_models(models)
 
     def setup_status(self, **kwargs):
         """Gate setup on CLI presence + Kimchi login (SPEC §4)."""

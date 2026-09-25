@@ -92,12 +92,16 @@ turn (double execution) and how to route tools (harness-side vs
 Hermes-side) is the main open question (SPEC §OQ-B4); resolution options
 and the e2e probe plan are in the spec.
 
-### 6. Model picker pseudo-entries (Kimchi × Hermes, fixed in plugin)
+### 6. Model picker contents (resolved — shipped unfiltered)
 
-Kimchi advertises `multi-model`/`auto` pseudo-entries alongside real model
-ids (`kimchi-harness/src/modes/acp/server.ts:627`); Hermes' shim would list
-them verbatim. The plugin's `fetch_models` override filters them
-(SPEC §F15).
+The ACP session advertises the harness's full model registry —
+provider-prefixed ids (`kimchi-dev/...`, `openai-codex/...`), the harness's
+`auto` router mode, and real models like `auto-beta`. All ship unfiltered
+(user decision 2026-09-25; the earlier "pseudo-entry filtering" plan is
+retracted — `multi-model` never appeared live). Note: selecting an
+`openai-codex/*` id means the *harness* (not Hermes) calls Codex — the
+harness discovered it from this machine's environment. The `kimchi-acp`
+row (harness session default) comes from the profile's fallback_models.
 
 ### 7. Copilot-branded errors (Hermes shim limitation; mitigated in plugin)
 

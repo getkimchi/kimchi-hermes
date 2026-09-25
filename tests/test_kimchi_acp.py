@@ -52,14 +52,14 @@ def test_run_prompt_error_rebranded(profile):
     assert "Copilot" not in str(excinfo.value)
 
 
-def test_fetch_models_filters_pseudo_entries(registry, fake_acp):
-    # Live shape (2026-09-25): ids arrive provider-prefixed; the pseudo check
-    # runs on the leaf, so kimchi-dev/auto is dropped but auto-beta stays.
+def test_fetch_models_dedupes_without_content_filtering(registry, fake_acp):
+    # User decision 2026-09-25 (SPEC F15): no pseudo-entry filtering — `auto`
+    # is the harness's router mode, `auto-beta` a real model. Dedup only.
     module = load_plugin("kimchi-acp")
-    assert module._filter_pseudo_models(
-        ["kimchi-dev/auto", "kimchi-dev/multi-model", "kimchi-dev/auto-beta", "kimchi-dev/kimi-k3"]
-    ) == ["kimchi-dev/auto-beta", "kimchi-dev/kimi-k3"]
-    assert module.kimchi_acp.fetch_models() == ["kimi-k3"]  # fake catalog: bare pseudo ids dropped
+    assert module._dedupe_models(
+        ["kimchi-dev/auto", "kimchi-dev/auto-beta", "kimchi-dev/kimi-k3", "kimchi-dev/kimi-k3"]
+    ) == ["kimchi-dev/auto", "kimchi-dev/auto-beta", "kimchi-dev/kimi-k3"]
+    assert module.kimchi_acp.fetch_models() == ["multi-model", "auto", "kimi-k3"]
 
 
 def test_fetch_models_non_acp_base_url_returns_none(monkeypatch, registry, fake_acp):
@@ -135,9 +135,8 @@ def test_env_key_counts_as_logged_in(registry, fake_acp, monkeypatch, tmp_path):
     assert status["logged_in"] is True
 
 
-def test_filter_pseudo_models_unit(registry, fake_acp):
+def test_dedupe_models_unit(registry, fake_acp):
     module = load_plugin("kimchi-acp")
-    assert module._filter_pseudo_models(None) is None
-    assert module._filter_pseudo_models([]) is None
-    assert module._filter_pseudo_models(["auto"]) is None  # all pseudo → None
-    assert module._filter_pseudo_models(["Auto", "kimi-k3", "kimi-k3"]) == ["kimi-k3"]
+    assert module._dedupe_models(None) is None
+    assert module._dedupe_models([]) is None
+    assert module._dedupe_models(["a", "a", "b"]) == ["a", "b"]
