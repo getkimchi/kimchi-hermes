@@ -90,18 +90,22 @@ The Kimchi harness **executes its own tools for real** when driven over
 ACP in YOLO mode (probe: live tool_call updates, filesystem artifact
 verified). Consequences, in order of importance:
 
-1. **Harness-side execution is invisible to Hermes** — the shim forwards
-   only text, so Hermes' transcript carries no tool records. The model
-   itself cannot verify its prior turn's work from the flattened context
-   (observed: a "did you do it?" self-doubt loop that re-did the task).
+1. **Harness-side execution is invisible to Hermes by default** — the
+   shim forwards only text. **Addressed in this plugin** (commit 5b5362b):
+   `KimchiACPClient` renders each tool event as a compact line
+   (`[kimchi edit: /tmp/x] completed`) into the visible reply, so activity
+   shows in Hermes' UI and reaches later turns' context — the model can
+   verify its own prior work. Residual: plain text lines, not Hermes'
+   native tool cards (upstreaming a richer bridge remains future work).
 2. **Hermes' forwarded toolset is effectively unused** — the harness
    prefers its native tools under YOLO.
 3. **Double-execution was NOT observed** — the model narrates results
    instead of emitting re-runnable tool-call blocks; residual risk noted.
 
-Practical guidance: use `kimchi-acp` for harness-native agentic work and
-trust-but-verify its claims (check artifacts on disk), or use the `kimchi`
-API-key layer when you want Hermes' tool pipeline fully in charge.
+Practical guidance: use `kimchi-acp` for harness-native agentic work —
+tool activity is now visible inline and the model can verify its own
+claims across turns. Use the `kimchi` API-key layer when you want
+Hermes' tool pipeline fully in charge.
 
 ### 6. Model picker contents (resolved — shipped unfiltered)
 
