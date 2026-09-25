@@ -123,6 +123,16 @@ def fake_acp(monkeypatch):
         def list_models(self, *, timeout_seconds=15.0):
             return ["multi-model", "auto", "kimi-k3", "kimi-k3"]
 
+        def _handle_server_message(self, msg, *, process, cwd, text_parts, reasoning_parts, allow_file_requests=True):
+            # Mimic the real shim: capture text chunks only; tool events drop.
+            if msg.get("method") == "session/update":
+                update = (msg.get("params") or {}).get("update") or {}
+                if update.get("sessionUpdate") == "agent_message_chunk":
+                    content = update.get("content") or {}
+                    text_parts.append(str(content.get("text") or "") if isinstance(content, dict) else "")
+                return True
+            return False
+
     client_mod = types.ModuleType("agent.copilot_acp_client")
     client_mod.CopilotACPClient = FakeCopilotACPClient
     agent_mod = types.ModuleType("agent")

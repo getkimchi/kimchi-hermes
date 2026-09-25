@@ -104,6 +104,13 @@ except ImportError:  # pragma: no cover - exercised via stubs in tests
 class KimchiACPClient(_ACPClientBase):
     """CopilotACPClient with Kimchi-facing error strings and placeholder handling."""
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # toolCallId -> title, from the initial tool_call event; ACP allows
+        # tool_call_update events to omit the title, and rendering the raw id
+        # would be noise. Completed/failed entries are pruned.
+        self._tool_call_titles = {}
+
     def _spawn(self):
         try:
             return super()._spawn()
@@ -119,6 +126,47 @@ class KimchiACPClient(_ACPClientBase):
             return super()._run_prompt(prompt_text, timeout_seconds=timeout_seconds, model=model)
         except (RuntimeError, TimeoutError) as exc:
             raise type(exc)(_rebrand(str(exc))) from exc
+
+    def _handle_server_message(self, msg, *, process, cwd, text_parts, reasoning_parts, allow_file_requests=True):
+        """Surface harness-native tool activity in the visible reply text.
+
+        Hermes' shim captures only text chunks and silently drops
+        tool_call/tool_call_update updates, so YOLO harness execution is
+        invisible in Hermes' UI and absent from later turns' flattened
+        context — the "did you do it?" self-doubt loop observed in e2e
+        (SPEC OQ-B4). Render one compact line per tool event into
+        text_parts (arrival order → interleaved with narrative chunks);
+        delegate everything else to the shim untouched.
+        """
+        if msg.get("method") == "session/update" and text_parts is not None:
+            update = (msg.get("params") or {}).get("update") or {}
+            kind = str(update.get("sessionUpdate") or "")
+            status = str(update.get("status") or "").strip()
+            tool_call_id = str(update.get("toolCallId") or "")
+            title = str(update.get("title") or "").strip()
+            if kind == "tool_call":
+                if title and tool_call_id:
+                    self._tool_call_titles[tool_call_id] = title
+            elif kind == "tool_call_update" and not title and tool_call_id in self._tool_call_titles:
+                title = self._tool_call_titles[tool_call_id]
+                if status in ("completed", "failed"):
+                    self._tool_call_titles.pop(tool_call_id, None)
+            render = kind == "tool_call" or (
+                kind == "tool_call_update" and status in ("completed", "failed")
+            )
+            if render:
+                tool_kind = str(update.get("kind") or "").strip()
+                label = f"{tool_kind}: {title}" if tool_kind and tool_kind != "other" else title
+                text_parts.append(f"[kimchi {label}]" + (f" {status}" if status else "") + "\n")
+                return True
+        return super()._handle_server_message(
+            msg,
+            process=process,
+            cwd=cwd,
+            text_parts=text_parts,
+            reasoning_parts=reasoning_parts,
+            allow_file_requests=allow_file_requests,
+        )
 
 
 class KimchiACPProfile(ProviderProfile):

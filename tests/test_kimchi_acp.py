@@ -35,6 +35,42 @@ def test_spawn_error_rebranded(profile):
     assert "COPILOT" not in message
 
 
+def test_tool_call_updates_rendered_into_visible_text(profile):
+    """OQ-B4 gap fix: harness tool activity must be visible in the reply."""
+    client = profile.create_client()
+    text_parts = []
+    kwargs = dict(process=None, cwd="/tmp", text_parts=text_parts, reasoning_parts=[], allow_file_requests=True)
+
+    client._handle_server_message(
+        {"method": "session/update", "params": {"update": {
+            "sessionUpdate": "tool_call", "toolCallId": "t1", "kind": "edit",
+            "title": "/tmp/date.py", "status": "in_progress"}}}, **kwargs)
+    client._handle_server_message(
+        {"method": "session/update", "params": {"update": {
+            "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Done."}}}}, **kwargs)
+    client._handle_server_message(
+        {"method": "session/update", "params": {"update": {
+            "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed"}}}, **kwargs)
+    # in_progress tool_call_update is noise — not rendered
+    client._handle_server_message(
+        {"method": "session/update", "params": {"update": {
+            "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "in_progress"}}}, **kwargs)
+
+    assert text_parts == ["[kimchi edit: /tmp/date.py] in_progress\n", "Done.", "[kimchi /tmp/date.py] completed\n"]
+
+
+def test_other_client_methods_delegate_to_shim(profile):
+    client = profile.create_client()
+    text_parts = []
+    handled = client._handle_server_message(
+        {"method": "fs/read_text_file", "id": 7, "params": {"path": "/tmp/x"}},
+        process=None, cwd="/tmp", text_parts=text_parts, reasoning_parts=[], allow_file_requests=True)
+    # The fake shim implements the method-detecting contract; ours must not
+    # have swallowed non-tool messages.
+    assert handled is False
+    assert text_parts == []
+
+
 def test_placeholder_model_skips_selection(profile):
     client = profile.create_client()
     client._run_prompt("hi", timeout_seconds=5, model="kimchi-acp")
