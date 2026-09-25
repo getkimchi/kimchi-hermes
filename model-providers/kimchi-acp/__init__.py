@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 # SPEC §4).
 _PLACEHOLDER_MODELS = {"kimchi-acp", "copilot-acp"}
 
-# Max chars of ACP tool content echoed per rendered tool line.
-_EXCERPT_MAX = 160
+# Max chars of ACP tool content echoed per rendered tool line — kept
+# short so wrapped headlines stay scannable in the TUI.
+_EXCERPT_MAX = 100
 
 # Kimchi's session model ids arrive provider-prefixed (live: "kimchi-dev/...",
 # "openai-codex/..."). NO content filtering: `auto` is the harness's router
@@ -142,6 +143,7 @@ class KimchiACPClient(_ACPClientBase):
         # tool_call_update events to omit the title, and rendering the raw id
         # would be noise. Completed/failed entries are pruned.
         self._tool_call_titles = {}
+        self._tool_block_open = False
         self._heal_spawn_target()
 
     def _heal_spawn_target(self):
@@ -188,35 +190,54 @@ class KimchiACPClient(_ACPClientBase):
         tool_call/tool_call_update updates, so YOLO harness execution is
         invisible in Hermes' UI and absent from later turns' flattened
         context — the "did you do it?" self-doubt loop observed in e2e
-        (SPEC OQ-B4). Render one compact line per tool event into
-        text_parts (arrival order → interleaved with narrative chunks);
-        delegate everything else to the shim untouched.
+        (SPEC OQ-B4). Render one markdown bullet per COMPLETED/FAILED tool —
+        registration events never render (no pending/in_progress churn),
+        adjacent duplicates collapse, and the bullet block is closed with a
+        blank line before narrative text so markdown renders cleanly.
+        Delegate everything else to the shim untouched.
         """
         if msg.get("method") == "session/update" and text_parts is not None:
             update = (msg.get("params") or {}).get("update") or {}
             kind = str(update.get("sessionUpdate") or "")
             status = str(update.get("status") or "").strip()
             tool_call_id = str(update.get("toolCallId") or "")
-            title = str(update.get("title") or "").strip()
+
             if kind == "tool_call":
+                # Registration only — rendering waits for the terminal update
+                # so pending/in_progress churn never reaches the reply.
+                title = str(update.get("title") or "").strip()
                 if title and tool_call_id:
                     self._tool_call_titles[tool_call_id] = title
-            elif kind == "tool_call_update" and not title and tool_call_id in self._tool_call_titles:
-                title = self._tool_call_titles[tool_call_id]
-                if status in ("completed", "failed"):
-                    self._tool_call_titles.pop(tool_call_id, None)
-            render = kind == "tool_call" or (
-                kind == "tool_call_update" and status in ("completed", "failed")
-            )
-            if render:
-                tool_kind = str(update.get("kind") or "").strip()
-                label = f"{tool_kind}: {title}" if tool_kind and tool_kind != "other" else title
-                line = f"[kimchi {label}]" + (f" {status}" if status else "")
+                return True
+
+            if kind == "tool_call_update" and status in ("completed", "failed"):
+                # Title is kept (not popped): identical re-delivered events
+                # must still resolve it, or they'd render as generic "tool".
+                title = str(update.get("title") or "").strip() or self._tool_call_titles.get(tool_call_id, "")
+                glyph = "✓" if status == "completed" else "✗"
+                line = f"- ⚙ **{title or 'tool'}** {glyph}"
                 excerpt = _content_excerpt(update)
                 if excerpt:
                     line += f" — {excerpt}"
-                text_parts.append(line + "\n")
+                line += "\n"
+                if text_parts and text_parts[-1] == line:
+                    return True  # identical adjacent event — collapse
+                text_parts.append(line)
+                self._tool_block_open = True
                 return True
+
+            if kind == "agent_message_chunk":
+                content = update.get("content") or {}
+                chunk = str(content.get("text") or "") if isinstance(content, dict) else ""
+                if chunk:
+                    if self._tool_block_open:
+                        # Close the bullet block so markdown renders the
+                        # narrative as its own paragraph.
+                        text_parts.append("\n")
+                        self._tool_block_open = False
+                    text_parts.append(chunk)
+                return True
+
         return super()._handle_server_message(
             msg,
             process=process,

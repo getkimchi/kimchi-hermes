@@ -35,51 +35,57 @@ def test_spawn_error_rebranded(profile):
     assert "COPILOT" not in message
 
 
-def test_tool_call_updates_rendered_into_visible_text(profile):
-    """OQ-B4 gap fix: harness tool activity must be visible in the reply."""
+def test_tool_events_render_one_bullet_on_terminal_status(profile):
+    """Pending/in_progress churn never renders; one bullet per tool."""
     client = profile.create_client()
-    text_parts = []
-    kwargs = dict(process=None, cwd="/tmp", text_parts=text_parts, reasoning_parts=[], allow_file_requests=True)
+    tp = []
+    kwargs = dict(process=None, cwd="/tmp", text_parts=tp, reasoning_parts=[], allow_file_requests=True)
 
-    client._handle_server_message(
-        {"method": "session/update", "params": {"update": {
-            "sessionUpdate": "tool_call", "toolCallId": "t1", "kind": "edit",
-            "title": "/tmp/date.py", "status": "in_progress"}}}, **kwargs)
-    client._handle_server_message(
-        {"method": "session/update", "params": {"update": {
-            "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Done."}}}}, **kwargs)
-    client._handle_server_message(
-        {"method": "session/update", "params": {"update": {
-            "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed"}}}, **kwargs)
-    # in_progress tool_call_update is noise — not rendered
-    client._handle_server_message(
-        {"method": "session/update", "params": {"update": {
-            "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "in_progress"}}}, **kwargs)
+    client._handle_server_message({"method": "session/update", "params": {"update": {
+        "sessionUpdate": "tool_call", "toolCallId": "t1", "kind": "edit",
+        "title": "/tmp/date.py", "status": "in_progress"}}}, **kwargs)
+    assert tp == []  # registration only — no pending spam
 
-    assert text_parts == ["[kimchi edit: /tmp/date.py] in_progress\n", "Done.", "[kimchi /tmp/date.py] completed\n"]
+    client._handle_server_message({"method": "session/update", "params": {"update": {
+        "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed",
+        "content": [{"type": "content", "content": {"type": "text", "text": "wrote 12 bytes"}}]}}}, **kwargs)
+    assert tp == ["- ⚙ **/tmp/date.py** ✓ — wrote 12 bytes\n"]
+
+    client._handle_server_message({"method": "session/update", "params": {"update": {
+        "sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Done."}}}}, **kwargs)
+    assert tp[-2:] == ["\n", "Done."]  # bullet block closed before narrative
+
+    client._handle_server_message({"method": "session/update", "params": {"update": {
+        "sessionUpdate": "tool_call", "toolCallId": "t2", "kind": "search", "title": "web_search"}}}, **kwargs)
+    client._handle_server_message({"method": "session/update", "params": {"update": {
+        "sessionUpdate": "tool_call_update", "toolCallId": "t2", "status": "failed"}}}, **kwargs)
+    assert tp[-1] == "- ⚙ **web_search** ✗\n"
 
 
-def test_tool_content_excerpt_rendered_and_truncated(profile):
+def test_tool_line_duplicates_collapsed_and_excerpts_truncated(profile):
     client = profile.create_client()
-    text_parts = []
-    kwargs = dict(process=None, cwd="/tmp", text_parts=text_parts, reasoning_parts=[], allow_file_requests=True)
+    tp = []
+    kwargs = dict(process=None, cwd="/tmp", text_parts=tp, reasoning_parts=[], allow_file_requests=True)
 
-    # ACP convention: agents embed progress/output text in content blocks.
-    client._handle_server_message(
-        {"method": "session/update", "params": {"update": {
-            "sessionUpdate": "tool_call_update", "toolCallId": "t2", "status": "completed",
-            "title": "cat config.yaml",
-            "content": [{"type": "content", "content": {"type": "text", "text": "Found 3 configuration files..."}}]}}}, **kwargs)
-    assert text_parts[-1] == "[kimchi cat config.yaml] completed — Found 3 configuration files...\n"
+    client._handle_server_message({"method": "session/update", "params": {"update": {
+        "sessionUpdate": "tool_call", "toolCallId": "t1", "title": "web_search"}}}, **kwargs)
+    for _ in range(2):  # two identical completed events (e.g. parallel searches)
+        client._handle_server_message({"method": "session/update", "params": {"update": {
+            "sessionUpdate": "tool_call_update", "toolCallId": "t1", "status": "completed",
+            "content": [{"type": "content", "content": {"type": "text", "text": "same result"}}]}}}, **kwargs)
+    assert tp == ["- ⚙ **web_search** ✓ — same result\n"]
 
     long_text = "x" * 400
-    client._handle_server_message(
-        {"method": "session/update", "params": {"update": {
-            "sessionUpdate": "tool_call", "toolCallId": "t3", "kind": "execute",
-            "title": "big run", "content": [{"type": "text", "text": long_text}]}}}, **kwargs)
-    line = text_parts[-1]
-    assert line.startswith("[kimchi execute: big run] — ") and line.endswith("…\n")
-    assert len(line) <= len("[kimchi execute: big run] — ") + 160 + 1
+    client._handle_server_message({"method": "session/update", "params": {"update": {
+        "sessionUpdate": "tool_call", "toolCallId": "t2", "title": "big run"}}}, **kwargs)
+    client._handle_server_message({"method": "session/update", "params": {"update": {
+        "sessionUpdate": "tool_call_update", "toolCallId": "t2", "status": "completed",
+        "content": [{"type": "text", "text": long_text}]}}}, **kwargs)
+    out = tp[-1]
+    assert out.startswith("- ⚙ **big run** ✓ — ") and out.endswith("…\n")
+    assert len(out) <= len("- ⚙ **big run** ✓ — ") + 100 + 1
+
+
 def test_other_client_methods_delegate_to_shim(profile):
     client = profile.create_client()
     text_parts = []

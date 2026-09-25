@@ -92,8 +92,9 @@ verified). Consequences, in order of importance:
 
 1. **Harness-side execution is invisible to Hermes by default** — the
    shim forwards only text. **Addressed in this plugin** (commit 5b5362b):
-   `KimchiACPClient` renders each tool event as a compact line
-   (`[kimchi edit: /tmp/x] completed`) into the visible reply, so activity
+   `KimchiACPClient` renders one markdown bullet per
+   completed/failed tool (`- ⚙ **web_search** ✓ — excerpt`) into the
+   visible reply (pending/in_progress churn suppressed), so activity
    shows in Hermes' UI and reaches later turns' context — the model can
    verify its own prior work. Residual: plain text lines, not Hermes'
    native tool cards (upstreaming a richer bridge remains future work).
