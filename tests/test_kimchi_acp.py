@@ -92,6 +92,34 @@ def test_other_client_methods_delegate_to_shim(profile):
     assert text_parts == []
 
 
+def test_client_self_heals_shim_copilot_defaults(registry, fake_acp, monkeypatch):
+    """Desktop/auxiliary rebuild paths construct clients without command/args;
+    the shim then defaults to the copilot CLI (observed live 2026-09-25)."""
+    monkeypatch.delenv("KIMCHI_ACP_COMMAND", raising=False)
+    monkeypatch.delenv("KIMCHI_ACP_ARGS", raising=False)
+    module = load_plugin("kimchi-acp")
+    client = module.KimchiACPClient(api_key="x", base_url="acp://copilot")
+    assert client._acp_command == "kimchi"
+    assert tuple(client._acp_args) == ("--mode", "acp", "--yolo")
+    assert client.base_url == "acp://kimchi"
+
+
+def test_client_explicit_command_respected(registry, fake_acp):
+    module = load_plugin("kimchi-acp")
+    client = module.KimchiACPClient(command="/custom/kimchi", args=("--mode", "acp"))
+    assert client._acp_command == "/custom/kimchi"
+    assert list(client._acp_args) == ["--mode", "acp"]
+
+
+def test_client_env_args_respected_in_fallback(registry, fake_acp, monkeypatch):
+    monkeypatch.delenv("KIMCHI_ACP_COMMAND", raising=False)
+    monkeypatch.setenv("KIMCHI_ACP_ARGS", "--mode acp")  # documented YOLO escape hatch
+    module = load_plugin("kimchi-acp")
+    client = module.KimchiACPClient()
+    assert client._acp_command == "kimchi"
+    assert list(client._acp_args) == ["--mode", "acp"]
+
+
 def test_placeholder_model_skips_selection(profile):
     client = profile.create_client()
     client._run_prompt("hi", timeout_seconds=5, model="kimchi-acp")

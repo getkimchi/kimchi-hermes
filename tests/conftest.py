@@ -107,6 +107,13 @@ def fake_acp(monkeypatch):
         def __init__(self, **kwargs):
             self.kwargs = kwargs
             self.last_model = None
+            # Mirror the real constructor's contract (copilot_acp_client.py):
+            # copilot-branded defaults when command/args/base_url are absent —
+            # the exact leak KimchiACPClient._heal_spawn_target fixes.
+            self.api_key = kwargs.get("api_key") or "copilot-acp"
+            self.base_url = kwargs.get("base_url") or "acp://copilot"
+            self._acp_command = kwargs.get("acp_command") or kwargs.get("command") or "copilot"
+            self._acp_args = list(kwargs.get("acp_args") or kwargs.get("args") or ["--acp", "--stdio"])
 
         def _spawn(self):
             raise RuntimeError(

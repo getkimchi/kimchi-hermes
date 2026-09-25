@@ -12,6 +12,7 @@ handles an API key on this path.
 import json
 import logging
 import os
+import shlex
 import shutil
 from pathlib import Path
 
@@ -141,6 +142,28 @@ class KimchiACPClient(_ACPClientBase):
         # tool_call_update events to omit the title, and rendering the raw id
         # would be noise. Completed/failed entries are pruned.
         self._tool_call_titles = {}
+        self._heal_spawn_target()
+
+    def _heal_spawn_target(self):
+        """Never let the shim's Copilot defaults leak into a Kimchi spawn.
+
+        Hermes constructs clients on several paths (setup wizard, runtime
+        caches, Desktop/auxiliary rebuilds) and not all of them pass
+        command/args; the shim's fallback then resolves to the copilot CLI
+        (observed in the Desktop app: "Could not start ... command
+        'copilot'"). A Kimchi client must always target the Kimchi CLI.
+        """
+        command = (getattr(self, "_acp_command", "") or "").strip()
+        if command in ("", "copilot"):
+            self._acp_command = os.environ.get("KIMCHI_ACP_COMMAND", "").strip() or "kimchi"
+        args = getattr(self, "_acp_args", None)
+        env_args = os.environ.get("KIMCHI_ACP_ARGS", "").strip()
+        if env_args:
+            self._acp_args = shlex.split(env_args)
+        elif not args or tuple(args) == ("--acp", "--stdio"):
+            self._acp_args = ["--mode", "acp", "--yolo"]
+        if (getattr(self, "base_url", "") or "") == "acp://copilot":
+            self.base_url = "acp://kimchi"
 
     def _spawn(self):
         try:
