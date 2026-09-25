@@ -1,0 +1,5 @@
+name: kimchi-provider
+kind: model-provider
+version: 1.0.0
+description: Kimchi (kimchi.dev) models via OpenAI-compatible API
+author: Zilvinas Urbonas

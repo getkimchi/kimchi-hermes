@@ -1,0 +1,5 @@
+name: kimchi-acp-provider
+kind: model-provider
+version: 1.0.0
+description: Kimchi harness via ACP subprocess (kimchi --mode acp)
+author: Zilvinas Urbonas
