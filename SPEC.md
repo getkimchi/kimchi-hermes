@@ -51,6 +51,7 @@ spot-checked by two independent model reviews:
 | F14 | **OQ-B1 closed:** Kimchi's ACP SDK 0.19.2 uses `PROTOCOL_VERSION = 1` — matches Hermes' handshake exactly. *(Verified by kimi-k3 + glm-5.3 against the SDK source.)* | `@agentclientprotocol/sdk` 0.19.2 |
 | F15 | **OQ-B2 closed:** Kimchi's `session/new` always advertises the `model` config option and implements `session/set_config_option` (plus legacy `models.availableModels`) — Hermes' model-selection flow works end-to-end. Caveats: pseudo-entries (`"multi-model"`, `"auto"`) may leak into Hermes' picker; filter them in `fetch_models` | `server.ts:627` + both reviews |
 | F16 | Hermes user has a managed Hermes install locally (`~/.hermes/hermes-agent@d5785bb`, verified byte-identical to upstream for the files this spec relies on) | user confirmation + reviewer verification |
+| F17 | **OQ-A1 resolved live (2026-09-25):** the metadata endpoint returns `{"models": [{slug, provider, tool_call, deprecated_at, limits.context_window, ...}]}` — 20 items, none with `id`/`model`/`name` keys; model ids come from `slug`. The gateway WAF returns **403 when `Accept: application/json` is absent** (both headers the plugin already sends). Full fetch verified inside Hermes' own venv: 20 models | live probes + commit d45f400 |
 
 ## 3. Spec A — `kimchi` (API-key model provider)
 
@@ -95,8 +96,8 @@ ProviderProfile(
 
 ### Open questions (hypotheses to verify)
 
-- **OQ-A1 (load-bearing):** What shape does `/v1/models/metadata?include_in_cli=true` return, and does the default `fetch_models()` parse it? *Learn by: `curl -H "Authorization: Bearer $KIMCHI_API_KEY"` — needs a live key.*
-- **OQ-A2** Does the gateway accept `reasoning_effort` / reasoning params, and at what levels? *Learn by: live turn + `hermes doctor`; add `build_api_kwargs_extras` only if needed.*
+- **OQ-A1 — RESOLVED (F17).** Recorded live shape handled by `_lenient_model_ids` (`slug` ids, retired-model filtering via `deprecated_at`); regression test captures the recorded shape.
+- **OQ-A2 — partially answered:** a default `reasoning_effort: medium` turn on `glm-5.3-flash` succeeded with no 400 (2026-09-25). Full per-model vocabulary still unverified; add `build_api_kwargs_extras` only if a live turn needs it.
 - **OQ-A3** Aux-model choice for compression/vision (default: none → Hermes uses main model). *Learn by: usage; pin later if needed.*
 
 ## 4. Spec B — `kimchi-acp` (ACP external-process provider)
@@ -188,7 +189,7 @@ kimchi_acp = KimchiACPProfile(
 
 ## 5. Delivery & process
 
-- Repo: this one. `install.sh` syncs `model-providers/*` → `~/.hermes/plugins/model-providers/`. Uninstall = delete the two dirs.
+- Repo: this one. `install.sh` syncs `model-providers/*` → `~/.hermes/plugins/model-providers/`. Uninstall = delete the two dirs. **`install.sh` is a plain copy — re-run it after every plugin change** (a stale installed copy caused the 0-models incident on 2026-09-25; upstream discovery does not watch files).
 - Implementation in thin slices, one clear commit per slice; each slice updates this spec where implementation taught something (spec-maintenance discipline).
 - Reviews before implementation: kimi-k3 + glm-5.3 (done, incorporated), then the user (plan gate). Implementation starts only after user approval.
 - Tests: hermetic pytest unit tests for profile registration/fields + the catalog shape adapter (mocked HTTP) + pseudo-entry filtering; manual e2e checklist per layer against the local Hermes install (F16) and local `kimchi` build. Live probes marked "needs KIMCHI_API_KEY" are HITL items.

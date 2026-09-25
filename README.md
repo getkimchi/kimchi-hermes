@@ -115,5 +115,14 @@ maintainers before proposing a bundled-provider PR.
 
 ## Status
 
-Spec reviewed (kimi-k3, glm-5.3 — both APPROVE-WITH-CHANGES, findings
-incorporated). Awaiting user plan approval; implementation not started.
+- **Layer 1 (`kimchi`) verified end-to-end** (2026-09-25): provider picker
+  lists 20 live models; model switch + real turn on `glm-5.3-flash`
+  succeeded (~41 t/s, `reasoning_effort: medium` accepted — SPEC OQ-A2
+  default path works).
+- **Layer 2 (`kimchi-acp`)**: catalog probe verified live (31 models after
+  pseudo-entry filtering); real-turn verification pending (OQ-B4).
+- Ops note: `./install.sh` is a plain copy into `~/.hermes` — **re-run it
+  after every plugin change**; Hermes does not watch the plugin files (a
+  stale copy caused the 0-models incident on 2026-09-25).
+- Spec reviewed (kimi-k3, glm-5.3 — both APPROVE-WITH-CHANGES, findings
+  incorporated).
