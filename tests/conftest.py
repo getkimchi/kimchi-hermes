@@ -17,11 +17,54 @@ PLUGIN_DIR = REPO_ROOT / "model-providers"
 
 
 class StubProviderProfile:
-    """Field-capturing stand-in for providers.base.ProviderProfile."""
+    """Field-capturing stand-in for providers.base.ProviderProfile.
+
+    fetch_models mirrors the verified base contract (providers/base.py,
+    read 2026-09-25): custom base_url → {base}/models, else models_url or
+    {base_url}/models; Bearer auth + hermes-cli UA; OpenAI shape only
+    ({"data": [...]} or bare list of {"id": ...}); None on failure.
+    """
 
     def __init__(self, **kwargs):
+        # Mirror the real dataclass defaults so plugins can rely on the same
+        # attributes they'd see on providers.base.ProviderProfile.
+        self.default_headers = {}
+        self.supports_model_listing = True
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def fetch_models(self, *, api_key=None, base_url=None, timeout=8.0):
+        if not getattr(self, "supports_model_listing", True):
+            return None
+        profile_base = getattr(self, "base_url", "") or ""
+        caller_base = (base_url or "").strip()
+        custom_base = bool(caller_base) and caller_base.rstrip("/") != profile_base.rstrip("/")
+        if custom_base:
+            url = caller_base.rstrip("/") + "/models"
+        else:
+            url = getattr(self, "models_url", "") or (profile_base.rstrip("/") + "/models" if profile_base else "")
+        if not url:
+            return None
+
+        import json
+        import urllib.request
+
+        from hermes_cli.urllib_security import open_credentialed_url
+
+        request = urllib.request.Request(url)
+        if api_key:
+            request.add_header("Authorization", f"Bearer {api_key}")
+        request.add_header("Accept", "application/json")
+        request.add_header("User-Agent", "hermes-cli/9.9.9")  # base's WAF-safe UA (stubbed __version__)
+        for key, value in (getattr(self, "default_headers", None) or {}).items():
+            request.add_header(key, value)
+        try:
+            with open_credentialed_url(request, timeout=timeout) as response:
+                data = json.loads(response.read().decode())
+        except Exception:
+            return None
+        items = data if isinstance(data, list) else data.get("data", [])
+        return [m["id"] for m in items if isinstance(m, dict) and "id" in m]
 
 
 @pytest.fixture
@@ -48,3 +91,59 @@ def load_plugin(name: str):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture
+def fake_urllib(monkeypatch):
+    """Stub hermes_cli.urllib_security.open_credentialed_url.
+
+    Configure ``opener.payload`` with a JSON-serializable body (or an
+    Exception instance to simulate network failure); ``opener.calls`` records
+    every request's url/Authorization/User-Agent for assertions.
+    """
+    import json as _json
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._body = _json.dumps(payload).encode("utf-8")
+
+        def read(self):
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    class FakeUrlOpener:
+        def __init__(self):
+            self.payload = None
+            self.calls = []
+
+        def __call__(self, request, timeout=None):
+            self.calls.append(
+                {
+                    "url": request.full_url,
+                    "auth": request.get_header("Authorization"),
+                    "ua": request.get_header("User-agent"),
+                }
+            )
+            if isinstance(self.payload, Exception):
+                raise self.payload
+            if self.payload is None:
+                raise AssertionError("fake_urllib: no payload configured")
+            return FakeResponse(self.payload)
+
+    opener = FakeUrlOpener()
+
+    urllib_security_mod = types.ModuleType("hermes_cli.urllib_security")
+    urllib_security_mod.open_credentialed_url = opener
+
+    hermes_cli_mod = types.ModuleType("hermes_cli")
+    hermes_cli_mod.__version__ = "9.9.9"
+    hermes_cli_mod.urllib_security = urllib_security_mod
+
+    monkeypatch.setitem(sys.modules, "hermes_cli", hermes_cli_mod)
+    monkeypatch.setitem(sys.modules, "hermes_cli.urllib_security", urllib_security_mod)
+    return opener
