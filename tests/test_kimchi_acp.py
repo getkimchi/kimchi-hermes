@@ -52,9 +52,14 @@ def test_run_prompt_error_rebranded(profile):
     assert "Copilot" not in str(excinfo.value)
 
 
-def test_fetch_models_filters_pseudo_entries(profile):
-    models = profile.fetch_models()
-    assert models == ["kimi-k3"]  # multi-model/auto/dupes removed (SPEC F15)
+def test_fetch_models_filters_pseudo_entries(registry, fake_acp):
+    # Live shape (2026-09-25): ids arrive provider-prefixed; the pseudo check
+    # runs on the leaf, so kimchi-dev/auto is dropped but auto-beta stays.
+    module = load_plugin("kimchi-acp")
+    assert module._filter_pseudo_models(
+        ["kimchi-dev/auto", "kimchi-dev/multi-model", "kimchi-dev/auto-beta", "kimchi-dev/kimi-k3"]
+    ) == ["kimchi-dev/auto-beta", "kimchi-dev/kimi-k3"]
+    assert module.kimchi_acp.fetch_models() == ["kimi-k3"]  # fake catalog: bare pseudo ids dropped
 
 
 def test_fetch_models_non_acp_base_url_returns_none(monkeypatch, registry, fake_acp):

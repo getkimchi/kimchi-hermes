@@ -50,13 +50,19 @@ def _rebrand(message: str) -> str:
 
 
 def _filter_pseudo_models(models):
-    """Drop Kimchi's pseudo-entries and duplicates from an advertised list."""
+    """Drop Kimchi's pseudo-entries and duplicates from an advertised list.
+
+    Session ids arrive provider-prefixed (live: ``kimchi-dev/auto``), so the
+    pseudo check runs on the path leaf. ``auto-beta`` is a real selectable
+    model and stays.
+    """
     if not models:
         return None
     seen, out = set(), []
     for model in models:
         model_id = str(model).strip()
-        if not model_id or model_id.lower() in _PSEUDO_MODELS or model_id in seen:
+        leaf = model_id.rsplit("/", 1)[-1].strip().lower()
+        if not model_id or leaf in _PSEUDO_MODELS or model_id in seen:
             continue
         seen.add(model_id)
         out.append(model_id)
