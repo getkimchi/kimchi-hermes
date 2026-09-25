@@ -94,6 +94,59 @@ def load_plugin(name: str):
 
 
 @pytest.fixture
+def fake_acp(monkeypatch):
+    """Stub agent.copilot_acp_client with a record/raise double.
+
+    The double mimics the surface KimchiACPClient overrides: _spawn raising a
+    Copilot-branded RuntimeError, _run_prompt recording the requested model
+    (model "BOOM" raises a branded RuntimeError), list_models returning a
+    pseudo-entry-laden catalog.
+    """
+
+    class FakeCopilotACPClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.last_model = None
+
+        def _spawn(self):
+            raise RuntimeError(
+                "Could not start Copilot ACP command 'copilot'. Install GitHub Copilot CLI "
+                "or set HERMES_COPILOT_ACP_COMMAND/COPILOT_CLI_PATH."
+            )
+
+        def _run_prompt(self, prompt_text, *, timeout_seconds, model=None):
+            self.last_model = model
+            if str(model or "").strip() == "BOOM":
+                raise RuntimeError("Copilot ACP session/prompt failed: boom")
+            return "ok", ""
+
+        def list_models(self, *, timeout_seconds=15.0):
+            return ["multi-model", "auto", "kimi-k3", "kimi-k3"]
+
+    client_mod = types.ModuleType("agent.copilot_acp_client")
+    client_mod.CopilotACPClient = FakeCopilotACPClient
+    agent_mod = types.ModuleType("agent")
+    agent_mod.copilot_acp_client = client_mod
+
+    auth_mod = types.ModuleType("hermes_cli.auth")
+    auth_mod.resolve_external_process_provider_credentials = lambda name: {
+        "base_url": "acp://kimchi",
+        "api_key": None,
+        "command": "kimchi",
+        "args": ("--mode", "acp", "--yolo"),
+    }
+
+    hermes_cli_mod = types.ModuleType("hermes_cli")
+    hermes_cli_mod.auth = auth_mod
+
+    monkeypatch.setitem(sys.modules, "agent", agent_mod)
+    monkeypatch.setitem(sys.modules, "agent.copilot_acp_client", client_mod)
+    monkeypatch.setitem(sys.modules, "hermes_cli", hermes_cli_mod)
+    monkeypatch.setitem(sys.modules, "hermes_cli.auth", auth_mod)
+    return {"client_mod": client_mod}
+
+
+@pytest.fixture
 def fake_urllib(monkeypatch):
     """Stub hermes_cli.urllib_security.open_credentialed_url.
 
