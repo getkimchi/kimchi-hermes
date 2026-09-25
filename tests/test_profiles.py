@@ -21,7 +21,9 @@ def test_kimchi_registered_and_fields(registry):
     assert profile.models_url == "https://llm.kimchi.dev/v1/models/metadata?include_in_cli=true"
     assert profile.auth_type == "api_key"
     assert profile.fallback_models == ()  # live catalog only — user decision
-    assert not profile.default_headers.get("User-Agent")  # base WAF-safe UA must win
+    # No custom UA declared — the base class's WAF-safe hermes-cli UA must win
+    # (the stub only records fields the plugin explicitly passes).
+    assert not getattr(profile, "default_headers", {}).get("User-Agent")
 
 
 def test_kimchi_acp_registered_and_fields(registry):
