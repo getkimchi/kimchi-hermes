@@ -11,7 +11,7 @@ Hermes Agent provider plugins for [Kimchi](https://kimchi.dev):
 
 Both are user-level plugins: they install into
 `~/.hermes/plugins/model-providers/` and require no changes to Hermes core.
-See [`SPEC.md`](SPEC.md) for the full spec and evidence table.
+See [`SPEC.md`](SPEC.md) for the full spec, evidence table, and decision log.
 
 ## Install
 
@@ -32,7 +32,7 @@ Requirements:
 | `KIMCHI_API_KEY` | kimchi | API key (checked before `~/.hermes/.env`) |
 | `KIMCHI_BASE_URL` | kimchi | Override the inference gateway base URL |
 | `KIMCHI_ACP_COMMAND` | kimchi-acp | Override the spawned binary (default `kimchi`) |
-| `KIMCHI_ACP_ARGS` | kimchi-acp | Override spawn args (default `--mode acp --yolo`) |
+| `KIMCHI_ACP_ARGS` | kimchi-acp | Override spawn args. **Note: empty string falls back to the default args** (including `--yolo`); to run *without* YOLO set `KIMCHI_ACP_ARGS="--mode acp"` |
 
 ## Roadmap & known gaps
 
@@ -50,8 +50,10 @@ human channel"). Our workaround is a decision: spawn the harness in YOLO
 mode (`--yolo`, Kimchi's designed no-restrictions permission mode —
 `kimchi-harness/src/modes/acp/server.ts:149-154`), so tool-permission
 prompts never fire. **Consequence: tools inside the harness execute without
-human approval.** Proper relay of permission prompts into Hermes' approval
-UI requires upstreaming a generic ACP client — future work.
+human approval.** Without YOLO (`KIMCHI_ACP_ARGS="--mode acp"`), permission
+requests are silently denied (fail-safe). Proper relay of permission
+prompts into Hermes' approval UI requires upstreaming a generic ACP client
+— future work.
 
 ### 2. In-session confirms/elicitation degrade to "no" (Kimchi limitation × Hermes limitation)
 
@@ -64,21 +66,47 @@ cancels — see #1), so such confirms resolve to "no"/cancelled (fail-safe).
 Under YOLO this should only affect non-tool confirms; adversarial turns are
 part of e2e verification (SPEC §OQ-B3) and outcomes will be recorded here.
 
-### 3. Model selection through ACP (under investigation)
+### 3. No true streaming; per-request cold start (Hermes shim limitation)
 
-Hermes selects models via `session/set_config_option` / legacy
-`session/set_model` based on what `session/new` advertises
-(`agent/copilot_acp_client.py`). Whether Kimchi's `session/new` advertises
-model config options is unverified (SPEC §OQ-B2). If it does not, picking a
-specific model under `kimchi-acp` falls back to the session default.
+Hermes' shim blocks until the Kimchi turn finishes and then fake-chunks the
+result — you will not see incremental token streaming from the harness
+(`agent/copilot_acp_client.py::_run_prompt`). Each request also spawns a
+fresh harness process (initialize + session/new), so every turn pays a
+cold-start cost. Both are properties of the reused shim, accepted for v1.
+Long agentic turns vs the shim's 900 s default timeout are under
+investigation (SPEC §OQ-B5).
 
-### 4. Reasoning-effort pass-through on the API-key path (under investigation)
+### 4. Images are dropped on the ACP path (Hermes shim limitation)
 
-Whether `llm.kimchi.dev` accepts `reasoning_effort` and at which levels is
-unverified (SPEC §OQ-A2). A `build_api_kwargs_extras` override will be added
-only if the live gateway needs it.
+The shim flattens the conversation to text; image parts are silently
+discarded (`agent/copilot_acp_client.py::_render_message_content`). Vision
+through `kimchi-acp` is not supported in v1. The API-key path (`kimchi`)
+is unaffected.
 
-### 5. Upstreaming (deferred)
+### 5. Tool-routing collision under YOLO (under investigation — key risk)
+
+Under YOLO the Kimchi harness executes its own tools during a turn, while
+Hermes' shim instructs the agent to emit OpenAI-shaped tool-call text
+blocks that Hermes then executes itself. Whether both happen on the same
+turn (double execution) and how to route tools (harness-side vs
+Hermes-side) is the main open question (SPEC §OQ-B4); resolution options
+and the e2e probe plan are in the spec.
+
+### 6. Model picker pseudo-entries (Kimchi × Hermes, fixed in plugin)
+
+Kimchi advertises `multi-model`/`auto` pseudo-entries alongside real model
+ids (`kimchi-harness/src/modes/acp/server.ts:627`); Hermes' shim would list
+them verbatim. The plugin's `fetch_models` override filters them
+(SPEC §F15).
+
+### 7. Copilot-branded errors (Hermes shim limitation; mitigated in plugin)
+
+Because the plugin reuses Hermes' `CopilotACPClient`, its failure messages
+reference Copilot ("Install GitHub Copilot CLI"). A thin subclass rewrites
+the common cases to Kimchi guidance (SPEC §4); any paths the subclass
+cannot reach will be documented here after e2e.
+
+### 8. Upstreaming (deferred)
 
 These plugins ship user-level first. Hermes' contribution policy has been
 closing in-tree third-party plugin categories in favor of standalone
@@ -87,4 +115,5 @@ maintainers before proposing a bundled-provider PR.
 
 ## Status
 
-Spec approved pending review (`SPEC.md`). Implementation has not started.
+Spec reviewed (kimi-k3, glm-5.3 — both APPROVE-WITH-CHANGES, findings
+incorporated). Awaiting user plan approval; implementation not started.

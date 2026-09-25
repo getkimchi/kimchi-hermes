@@ -5,6 +5,13 @@
 > implementation completes it"). Each Open Question lists how we expect to
 > learn the answer. The spec is updated as implementation teaches; commits
 > reference the section they change.
+>
+> **Review status:** APPROVE-WITH-CHANGES by two independent model reviews
+> (kimi-k3, glm-5.3, 2026-09-25). Their findings are incorporated below;
+> raw reports in `~/.kimchi-harness/.kimchi/docs/review.md` (latest) and the
+> reviewers' summaries. Both reviewers verified the evidence table against
+> primary sources, including a local byte-identical Hermes clone at
+> `~/.hermes/hermes-agent@d5785bb`.
 
 ## 1. Goal
 
@@ -23,23 +30,27 @@ Hermes' tooling fully in charge.
 
 ## 2. Verified facts (evidence table)
 
-Everything below was confirmed by reading source, not assumed:
+Everything below was confirmed by reading source, not assumed — and
+spot-checked by two independent model reviews:
 
 | # | Fact | Source |
 |---|---|---|
 | F1 | Kimchi CLI binary is `kimchi` (`bin: src/entry.ts`), "a coding agent CLI powered by Cast AI" | `kimchi-harness/package.json` |
 | F2 | ACP server mode exists: `kimchi --mode acp` | `kimchi-harness/src/cli-args.test.ts:80-99` |
-| F3 | Permission modes `default/plan/auto/yolo`; `--yolo` → `"yolo"` = "no restrictions"; also switchable at runtime via ACP config option | `kimchi-harness/src/modes/acp/server.ts:149-154, 1829-1840`, `server.test.ts:6350` |
-| F4 | ACP `initialize()` returns `protocolVersion` from the official SDK (`@agentclientprotocol/sdk` 0.19.2), `agentInfo: {name: "kimchi"}`, and advertises auth methods: browser OAuth `"kimchi-agent"` always; terminal `"kimchi login"` only when the client advertises `auth.terminal` | `server.ts:344-437` |
-| F5 | ACP `authenticate()` runs browser OAuth, persists to `~/.config/kimchi/config.json` (`writeApiKey`) and the agent's `auth.json`/`models.json` | `server.ts:437-486` |
-| F6 | API-key validation endpoint: `https://api.cast.ai/v1/llm/openai/supported-providers` (Bearer auth, 200/401/403 semantics) | `kimchi-harness/src/auth/validator.ts:9-90` |
+| F3 | Permission modes `default/plan/auto/yolo`; `--yolo` → `"yolo"` = "no restrictions"; also switchable at runtime via ACP config option | `server.ts:149-154, 1829-1840`, `server.test.ts:6350` |
+| F4 | ACP `initialize()` returns `protocolVersion` from the official SDK, `agentInfo: {name: "kimchi"}`, and advertises auth methods: browser OAuth `"kimchi-agent"` always; terminal `"kimchi login"` only when the client advertises `auth.terminal` | `server.ts:344-437` |
+| F5 | ACP `authenticate()` runs browser OAuth and persists the credential to Kimchi's store (`~/.config/kimchi/config.json` via `writeApiKey`) plus the harness agent dir's `auth.json`/`models.json` | `server.ts:437-486` |
+| F6 | API-key validation endpoint: `https://api.cast.ai/v1/llm/openai/supported-providers` (Bearer auth, 200/401/403 semantics) | `src/auth/validator.ts:9-90` |
 | F7 | Kimchi inference gateway (OpenAI-compatible chat completions): `https://llm.kimchi.dev/openai/v1/chat/completions` | `src/llm-gateway-error.test.ts:90`, `src/http/stream-idle-timeout.test.ts:28` |
 | F8 | Kimchi API-key precedence: `KIMCHI_API_KEY` env > project `.kimchi/config.json` (trust-gated) > `~/.config/kimchi/config.json` (`apiKey` field) | `src/config.ts:9,546-551`, `src/setup-wizard/steps/auth.ts:22-53` |
-| F9 | Hermes plugin contract: a directory with `__init__.py` (calls `register_provider(profile)`) + `plugin.yaml`; user dir `$HERMES_HOME/plugins/model-providers/` lazily discovered, last-writer-wins over bundled | `providers/README.md`, `plugins/model-providers/README.md` (upstream) |
-| F10 | Hermes external-process profile fields: `auth_type="external_process"`, `process_command`, `process_args`, `process_command_env_vars`, `process_args_env_var`; consumed by `hermes_cli/auth.resolve_external_process_provider_credentials()` | `providers/base.py` (upstream) |
-| F11 | Hermes `CopilotACPClient` is parameterized by `command`/`args` (reusable for any ACP agent); sends `initialize` with `protocolVersion: 1`; per request spawns a short-lived session; **auto-CANCELS `session/request_permission`**; flattens conversation to a text prompt and extracts OpenAI-shaped tool calls from the reply text; model selection via v1 `session/set_config_option` or legacy `session/set_model` | `agent/copilot_acp_client.py` (upstream) |
-| F12 | Hermes' bundled `copilot-acp` plugin is the template: `create_client()` returns the ACP shim client; `fetch_models()` probes models via a short-lived `session/new` | `plugins/model-providers/copilot-acp/__init__.py` (upstream) |
-| F13 | Hermes user has a managed Hermes install locally (`~/.hermes`) — e2e verification is possible | user confirmation 2026-09-25 |
+| F9 | Kimchi's own client discovers its model catalog at `https://llm.kimchi.dev/v1/models/metadata?include_in_cli=true` — **not** `/openai/v1/models` (review finding; cf. OQ-A1) | kimi-k3 review, from kimchi-harness model sources |
+| F10 | Hermes plugin contract: a directory with `__init__.py` (calls `register_provider(profile)`) + `plugin.yaml`; user dir `$HERMES_HOME/plugins/model-providers/` lazily discovered, last-writer-wins over bundled | `providers/README.md`, `plugins/model-providers/README.md` (upstream) |
+| F11 | Hermes external-process profile fields: `auth_type="external_process"`, `process_command`, `process_args`, `process_command_env_vars`, `process_args_env_var`; consumed by `hermes_cli/auth.resolve_external_process_provider_credentials()`. Empty `KIMCHI_ACP_ARGS` **falls back to `process_args`** (it does not clear args) | `providers/base.py`, `hermes_cli/auth.py:2062-2063` (both reviewers) |
+| F12 | Hermes `CopilotACPClient` is parameterized by `command`/`args` (reusable for any ACP agent); sends `initialize` with `protocolVersion: 1`; per request spawns a short-lived session, **blocking until the whole turn finishes, then fake-chunks the result** (no true token streaming); **auto-CANCELS `session/request_permission`**; flattens the conversation to a text prompt (images dropped) and extracts OpenAI-shaped tool calls from the reply text; model selection via v1 `session/set_config_option` or legacy `session/set_model`; default 900 s whole-session timeout; error strings are Copilot-branded | `agent/copilot_acp_client.py` (upstream) |
+| F13 | Hermes' bundled `copilot-acp` plugin is the template: `create_client()` returns the ACP shim client; `fetch_models()` probes models via a short-lived `session/new` | `plugins/model-providers/copilot-acp/__init__.py` (upstream) |
+| F14 | **OQ-B1 closed:** Kimchi's ACP SDK 0.19.2 uses `PROTOCOL_VERSION = 1` — matches Hermes' handshake exactly. *(Verified by kimi-k3 + glm-5.3 against the SDK source.)* | `@agentclientprotocol/sdk` 0.19.2 |
+| F15 | **OQ-B2 closed:** Kimchi's `session/new` always advertises the `model` config option and implements `session/set_config_option` (plus legacy `models.availableModels`) — Hermes' model-selection flow works end-to-end. Caveats: pseudo-entries (`"multi-model"`, `"auto"`) may leak into Hermes' picker; filter them in `fetch_models` | `server.ts:627` + both reviews |
+| F16 | Hermes user has a managed Hermes install locally (`~/.hermes/hermes-agent@d5785bb`, verified byte-identical to upstream for the files this spec relies on) | user confirmation + reviewer verification |
 
 ## 3. Spec A — `kimchi` (API-key model provider)
 
@@ -54,9 +65,11 @@ ProviderProfile(
     signup_url="https://app.kimchi.dev",
     env_vars=("KIMCHI_API_KEY", "KIMCHI_BASE_URL"),
     base_url="https://llm.kimchi.dev/openai/v1",   # F7; KIMCHI_BASE_URL overrides
+    models_url="https://llm.kimchi.dev/v1/models/metadata?include_in_cli=true",  # F9
     auth_type="api_key",
-    default_headers={"User-Agent": "HermesAgent/<version>"},
     fallback_models=(),   # live catalog only — user decision
+    # No custom default_headers UA: the base class already sends a WAF-safe
+    # `hermes-cli/<version>` UA; a custom one would override it (review finding).
 )
 ```
 
@@ -66,21 +79,23 @@ ProviderProfile(
   env → `~/.hermes/.env` → setup-wizard prompt (`hermes model`). No custom
   auth code in v1. Bridging from Kimchi's own `~/.config/kimchi/config.json`
   is a documented one-liner in README, not plugin code.
-- **Catalog**: default `fetch_models()` hits `{base_url}/models` with Bearer
-  auth (F9 contract). Empty `fallback_models` per user decision — if the
-  live fetch fails, the picker shows nothing rather than a stale list.
+- **Catalog**: `fetch_models()` targets `models_url` (F9). If the metadata
+  response shape is not OpenAI's `{"data":[{"id":…}]}` (OQ-A1), override
+  `fetch_models()` with a shape adapter. Empty `fallback_models` per user
+  decision — a transient catalog failure means an empty picker until
+  recovery (accepted consequence; OQ-A1 is load-bearing).
 - **Doctor**: free health check from `auth_type="api_key"` + `supports_health_check=True`.
 
 ### Acceptance criteria
 
 1. `hermes model` lists "Kimchi"; completing setup stores the key in `~/.hermes/.env`.
-2. `/model kimchi:<id>` lists live models when the key is valid.
-3. `hermes doctor` passes the Kimchi `/models` probe with a valid key.
+2. `/model kimchi:<id>` lists live models when the key is valid (correct catalog URL + shape).
+3. `hermes doctor` passes the Kimchi health probe with a valid key.
 4. One real agent turn completes against `llm.kimchi.dev`.
 
 ### Open questions (hypotheses to verify)
 
-- **OQ-A1** `{base_url}/models` returns OpenAI shape `{"data":[{"id":…}]}`. *Learn by: curl with a real key.*
+- **OQ-A1 (load-bearing):** What shape does `/v1/models/metadata?include_in_cli=true` return, and does the default `fetch_models()` parse it? *Learn by: `curl -H "Authorization: Bearer $KIMCHI_API_KEY"` — needs a live key.*
 - **OQ-A2** Does the gateway accept `reasoning_effort` / reasoning params, and at what levels? *Learn by: live turn + `hermes doctor`; add `build_api_kwargs_extras` only if needed.*
 - **OQ-A3** Aux-model choice for compression/vision (default: none → Hermes uses main model). *Learn by: usage; pin later if needed.*
 
@@ -92,11 +107,12 @@ ProviderProfile(
 class KimchiACPProfile(ProviderProfile):
     def create_client(self, **client_kwargs):
         from agent.copilot_acp_client import CopilotACPClient
-        return CopilotACPClient(**client_kwargs)
+        return _KimchiBrandedACPClient(**client_kwargs)   # thin subclass; see below
 
     def fetch_models(self, *, api_key=None, base_url=None, timeout=15.0):
         # session/new probe → model ids advertised by the Kimchi harness
-        # (same pattern as copilot-acp, F12); None → picker falls back.
+        # (F13 pattern), filtering pseudo-entries ("multi-model", "auto", F15).
+        # None → picker falls back.
 
     def setup_status(self, **kwargs):
         # {available: shutil.which("kimchi") is not None,
@@ -107,59 +123,84 @@ kimchi_acp = KimchiACPProfile(
     name="kimchi-acp", aliases=("kimchi-agent",),
     display_name="Kimchi (Harness via ACP)",
     api_mode="chat_completions",
-    env_vars=(),                       # subprocess owns auth (F10 pattern)
+    env_vars=(),                       # subprocess owns auth (F11 pattern)
     base_url="acp://kimchi",
     auth_type="external_process",
     process_command="kimchi",
     process_args=("--mode", "acp", "--yolo"),   # YOLO default — user decision
     process_command_env_vars=("KIMCHI_ACP_COMMAND",),
-    process_args_env_var="KIMCHI_ACP_ARGS",     # escape hatch to drop/alter --yolo
+    process_args_env_var="KIMCHI_ACP_ARGS",
+    # NOTE (review finding): KIMCHI_ACP_ARGS="" does NOT drop --yolo — an
+    # empty env var falls back to process_args (F11). The escape hatch to
+    # run without YOLO is: KIMCHI_ACP_ARGS="--mode acp".
 )
 ```
 
+- **`_KimchiBrandedACPClient`** (thin subclass of `CopilotACPClient`):
+  rewrites Copilot-branded error strings ("Copilot ACP", "Install GitHub
+  Copilot CLI") to Kimchi-specific guidance, since the reused client's
+  failure paths otherwise mislead (review finding). If subclassing proves
+  invasive (errors raised deep in private methods), fall back to documenting
+  the branding gap in README — decision deferred to implementation, either
+  outcome acceptable for v1.
+
 ### Behavior
 
-- **Turn flow**: Hermes' loop formats the conversation + Hermes toolset into
-  one prompt (F11 semantics); the Kimchi harness runs its internal loop and
-  streams `session/update` chunks back; Hermes executes any OpenAI-shaped
-  tool calls found in the reply.
+- **Turn flow**: per request, Hermes spawns `kimchi --mode acp --yolo`,
+  sends `initialize` (protocolVersion 1 — compatible, F14) + `session/new`,
+  applies the requested model via `session/set_config_option` (F15), then
+  sends the conversation + Hermes toolset as **one prompt** (F12 semantics).
+  The Kimchi harness runs its internal loop; Hermes receives the result
+  **after the turn completes** and fake-chunks it — there is **no true
+  token streaming** on this path (review finding; AC-2 reworded
+  accordingly).
 - **Auth**: owned by the subprocess (Kimchi's own credential store, F8).
-  Hermes never handles a key on this path. `KIMCHI_API_KEY`, if exported,
-  reaches the child process and wins inside Kimchi (F8).
+  Hermes never handles a key on this path. Whether an exported
+  `KIMCHI_API_KEY` actually reaches the child is **unverified** —
+  `hermes_subprocess_env` may strip it (review finding; probe in e2e, OQ-B6).
 - **Permissions**: `--yolo` default ⇒ Kimchi's tool-permission gate is off;
   no `session/request_permission` traffic for tool approvals (F3).
-- **Model selection**: `fetch_models`/`list_models` relies on `session/new`
-  advertising model config options (copilot pattern, F11). If Kimchi does
-  not advertise them, `/model kimchi-acp:x` logs a warning and uses the
-  session default — graceful, but degraded. See OQ-B2.
+  Without YOLO, Hermes' shim auto-cancels permission requests (F12) —
+  fail-safe denial, documented gap (README #1).
+- **Keyless spawn**: if Kimchi has no stored credential, the error surfaces
+  Kimchi's "Call session/authenticate" hint, which Hermes' shim cannot act
+  on. Setup/doc must point users at `kimchi login` as the recovery path
+  (review finding).
+- **Images**: silently dropped by the conversation-flattening shim (F12).
+  Vision through `kimchi-acp` is not supported in v1 (README #4).
+- **Performance**: every request = one harness cold start (process spawn +
+  initialize + session/new). Acceptable for v1; documented (README #5).
 
 ### Acceptance criteria
 
-1. With kimchi installed + logged in, `hermes model` shows "Kimchi (Harness via ACP)" and setup gates on login status (offers `kimchi login`).
-2. `/model kimchi-acp` starts a turn; streaming text arrives; the turn completes.
-3. Without kimchi installed, setup reports actionable guidance (login/install command), no crash.
-4. `KIMCHI_ACP_ARGS=""` spawn path works (no YOLO) — permission requests are auto-cancelled by the shim (documented gap, see README roadmap) rather than crashing.
+1. With kimchi installed + logged in, `hermes model` shows "Kimchi (Harness via ACP)"; setup gates on login status (offers `kimchi login`); model picker lists real model ids (pseudo-entries filtered).
+2. `/model kimchi-acp` runs a turn to completion; text result arrives (after the harness finishes — no incremental streaming); no crash.
+3. Without kimchi installed or logged in, setup reports actionable guidance (`kimchi login` / install), no crash, no Copilot-branded text.
+4. `KIMCHI_ACP_ARGS="--mode acp"` spawn path works (no YOLO) — permission requests are auto-cancelled by the shim (documented gap) rather than crashing.
+5. Error surfaces (spawn failure, timeout, missing CLI) name Kimchi, not Copilot, to the extent the wrapper achieves.
 
 ### Open questions (hypotheses to verify)
 
-- **OQ-B1** Does Kimchi's SDK server accept `protocolVersion: 1` from Hermes' shim (F11 vs F4)? *Learn by: e2e spawn + wire log.*
-- **OQ-B2** Does `session/new` advertise model config options (model selection) for the Kimchi harness? *Learn by: dumping one `session/new` result.*
-- **OQ-B3** Under YOLO, does Kimchi still emit `session/request_permission` for non-tool confirms (sudo/dangerous-command UI fallbacks)? If yes, the shim cancels them → fail-safe denial. *Learn by: adversarial e2e turn; document outcome in README roadmap.*
+- **OQ-B4 (key risk):** Under YOLO, the Kimchi harness executes its own tools during the turn, while Hermes' preamble instructs the agent to emit OpenAI-shaped `<tool_call>` text blocks that Hermes then executes — a double-execution / tool-routing collision the Copilot shim was never designed for, and profile hooks cannot fix. Candidate mitigations: (a) accept + document (harness-side execution is arguably the intended "harness usage"; Hermes executes only blocks the model also emits), (b) custom client that strips tool-call text from replies, (c) prompt variant that does not forward Hermes' toolset. *Learn by: adversarial e2e turn with a live key; record which behavior manifests.*
+- **OQ-B3** Under YOLO, does Kimchi still emit `session/request_permission` for non-tool confirms (sudo/dangerous-command UI fallbacks)? If yes, the shim cancels them → fail-safe denial. *Learn by: adversarial e2e turn.*
+- **OQ-B5** Long YOLO agentic turns vs the client's default 900 s whole-session timeout — do real turns fit? What's the right override? *Learn by: timing real workloads; if insufficient, wrap timeout construction in the subclass.*
+- **OQ-B6** Does `KIMCHI_API_KEY` survive `hermes_subprocess_env`'s secret blocklist into the spawned harness? *Learn by: e2e probe with env key set and empty config.json.*
 
 ## 5. Delivery & process
 
 - Repo: this one. `install.sh` syncs `model-providers/*` → `~/.hermes/plugins/model-providers/`. Uninstall = delete the two dirs.
 - Implementation in thin slices, one clear commit per slice; each slice updates this spec where implementation taught something (spec-maintenance discipline).
-- Reviews before implementation: kimi-k3 + glm-5.3 (spec review), then the user (plan gate). Implementation starts only after user approval.
-- Tests: hermetic pytest unit tests for profile registration/fields (no network, no hermes import at test time beyond stubs) + manual e2e checklist per layer against the local Hermes install (F13) and local `kimchi` build.
+- Reviews before implementation: kimi-k3 + glm-5.3 (done, incorporated), then the user (plan gate). Implementation starts only after user approval.
+- Tests: hermetic pytest unit tests for profile registration/fields + the catalog shape adapter (mocked HTTP) + pseudo-entry filtering; manual e2e checklist per layer against the local Hermes install (F16) and local `kimchi` build. Live probes marked "needs KIMCHI_API_KEY" are HITL items.
 
 ## 6. Decision log
 
 | Decision | Rationale / owner |
 |---|---|
 | YOLO is the default spawn mode for kimchi-acp | User decision 2026-09-25; risk acknowledged: unsupervised tool execution inside the spawned harness |
-| `fallback_models=()` — live catalog only | User decision 2026-09-25; stale IDs are worse than an empty picker |
-| Reuse Hermes' `CopilotACPClient` instead of a custom ACP client | Ours: ~300 LOC saved; permission/elicitation gaps accepted for v1 and documented (README roadmap). Revisit if OQ-B2/B3 degrade UX |
+| `fallback_models=()` — live catalog only | User decision 2026-09-25; accepted consequence: transient catalog failure = empty picker (OQ-A1 load-bearing) |
+| Reuse Hermes' `CopilotACPClient` + thin branding/error subclass rather than a custom ACP client | Ours: ~300 LOC saved; both reviewers judged reuse mechanically sound (note-level). Gaps (fake streaming, dropped images, cancelled permission requests, branded errors) documented; revisit if OQ-B4 forces it |
+| Close OQ-B1/B2 as verified facts (F14/F15) instead of e2e items | Both reviewers independently verified statically; saves e2e budget |
 | Both layers implemented in parallel | User decision 2026-09-25 |
 | Ship as user-level plugins first; upstream PR deferred | Upstream policy trend toward standalone plugins (`CONTRIBUTING.md`); confirm with maintainers before any bundled-provider PR |
 | Naming: `kimchi` (API) + `kimchi-acp` (agent) | Mirrors upstream convention (`kimi-coding`, `copilot-acp`) |
