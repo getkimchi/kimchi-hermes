@@ -141,7 +141,8 @@ maintainers before proposing a bundled-provider PR.
 - **Layer 2 (`kimchi-acp`) verified end-to-end** (2026-09-25): live catalog,
   model selection via config options, session-default placeholder, and
   harness-native tool execution confirmed by probe (OQ-B3/B4 resolved;
-  see roadmap #5).
+  see roadmap #5). Verified in the TUI and the Desktop app (the latter
+  after the spawn-target self-heal, commit e337a1a).
 - Ops note: `./install.sh` is a plain copy into `~/.hermes` — **re-run it
   after every plugin change**; Hermes does not watch the plugin files (a
   stale copy caused the 0-models incident on 2026-09-25).
