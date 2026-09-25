@@ -59,6 +59,27 @@ def test_tool_call_updates_rendered_into_visible_text(profile):
     assert text_parts == ["[kimchi edit: /tmp/date.py] in_progress\n", "Done.", "[kimchi /tmp/date.py] completed\n"]
 
 
+def test_tool_content_excerpt_rendered_and_truncated(profile):
+    client = profile.create_client()
+    text_parts = []
+    kwargs = dict(process=None, cwd="/tmp", text_parts=text_parts, reasoning_parts=[], allow_file_requests=True)
+
+    # ACP convention: agents embed progress/output text in content blocks.
+    client._handle_server_message(
+        {"method": "session/update", "params": {"update": {
+            "sessionUpdate": "tool_call_update", "toolCallId": "t2", "status": "completed",
+            "title": "cat config.yaml",
+            "content": [{"type": "content", "content": {"type": "text", "text": "Found 3 configuration files..."}}]}}}, **kwargs)
+    assert text_parts[-1] == "[kimchi cat config.yaml] completed — Found 3 configuration files...\n"
+
+    long_text = "x" * 400
+    client._handle_server_message(
+        {"method": "session/update", "params": {"update": {
+            "sessionUpdate": "tool_call", "toolCallId": "t3", "kind": "execute",
+            "title": "big run", "content": [{"type": "text", "text": long_text}]}}}, **kwargs)
+    line = text_parts[-1]
+    assert line.startswith("[kimchi execute: big run] — ") and line.endswith("…\n")
+    assert len(line) <= len("[kimchi execute: big run] — ") + 160 + 1
 def test_other_client_methods_delegate_to_shim(profile):
     client = profile.create_client()
     text_parts = []

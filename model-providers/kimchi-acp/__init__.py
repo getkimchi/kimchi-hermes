@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 # SPEC §4).
 _PLACEHOLDER_MODELS = {"kimchi-acp", "copilot-acp"}
 
+# Max chars of ACP tool content echoed per rendered tool line.
+_EXCERPT_MAX = 160
+
 # Kimchi's session model ids arrive provider-prefixed (live: "kimchi-dev/...",
 # "openai-codex/..."). NO content filtering: `auto` is the harness's router
 # mode and `auto-beta` a real model (user decision 2026-09-25, SPEC F15).
@@ -101,6 +104,34 @@ except ImportError:  # pragma: no cover - exercised via stubs in tests
     _ACPClientBase = object
 
 
+def _content_excerpt(update) -> str:
+    """Compact text excerpt from an ACP tool-call content array.
+
+    Mirrors the ecosystem convention (Zed/ACP reference clients render tool
+    content inline): agents embed progress text and output excerpts in the
+    update's ``content`` blocks. Accepts both block shapes ({type: "content",
+    content: {text}} and {type: "text", text}); collapses whitespace and
+    truncates. Empty when the shape is unrecognized.
+    """
+    blocks = update.get("content")
+    if not isinstance(blocks, list):
+        return ""
+    parts = []
+    for block in blocks:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict):
+            inner = block.get("content")
+            if isinstance(inner, dict) and isinstance(inner.get("text"), str):
+                parts.append(inner["text"])
+            elif isinstance(block.get("text"), str):
+                parts.append(block["text"])
+    text = " ".join(" ".join(parts).split())
+    if len(text) > _EXCERPT_MAX:
+        text = text[: _EXCERPT_MAX - 1] + "…"
+    return text
+
+
 class KimchiACPClient(_ACPClientBase):
     """CopilotACPClient with Kimchi-facing error strings and placeholder handling."""
 
@@ -157,7 +188,11 @@ class KimchiACPClient(_ACPClientBase):
             if render:
                 tool_kind = str(update.get("kind") or "").strip()
                 label = f"{tool_kind}: {title}" if tool_kind and tool_kind != "other" else title
-                text_parts.append(f"[kimchi {label}]" + (f" {status}" if status else "") + "\n")
+                line = f"[kimchi {label}]" + (f" {status}" if status else "")
+                excerpt = _content_excerpt(update)
+                if excerpt:
+                    line += f" — {excerpt}"
+                text_parts.append(line + "\n")
                 return True
         return super()._handle_server_message(
             msg,
