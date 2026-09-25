@@ -7,6 +7,7 @@ this plugin adds no custom auth code.
 """
 
 import logging
+from datetime import datetime, timezone
 
 from providers import register_provider
 from providers.base import ProviderProfile
@@ -26,12 +27,27 @@ logger = logging.getLogger(__name__)
 KIMCHI_MODELS_URL = "https://llm.kimchi.dev/v1/models/metadata?include_in_cli=true"
 
 
-def _lenient_model_ids(payload):
-    """Extract model ids from plausible catalog payload shapes (OQ-A1).
+def _is_deprecated(item) -> bool:
+    """True when the metadata marks the model already retired."""
+    raw = item.get("deprecated_at")
+    if not raw:
+        return False
+    try:
+        moment = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return moment <= datetime.now(timezone.utc)
 
-    Accepts: a bare list, ``{"data": [...]}``, or ``{"models": [...]}``;
-    items may be id strings or dicts with an ``id``/``model``/``name`` key.
-    Returns an ordered, de-duplicated list; ``None`` when nothing matches.
+
+def _lenient_model_ids(payload):
+    """Extract model ids from the catalog payload (OQ-A1, resolved live).
+
+    Recorded shape (2026-09-25): ``{"models": [{"slug": ..., "deprecated_at":
+    ..., "limits": {"context_window": ...}, ...}]}``. Accepts that plus the
+    OpenAI shapes (bare list / ``{"data": [...]}``); item ids come from
+    ``slug`` | ``id`` | ``model`` | ``name``; already-retired models are
+    skipped. Returns an ordered, de-duplicated list; ``None`` when nothing
+    matches.
     """
     if isinstance(payload, dict):
         items = next(
@@ -51,9 +67,11 @@ def _lenient_model_ids(payload):
             model_id = item.strip()
         elif isinstance(item, dict):
             model_id = next(
-                (str(item[key]).strip() for key in ("id", "model", "name") if item.get(key)),
+                (str(item[key]).strip() for key in ("slug", "id", "model", "name") if item.get(key)),
                 "",
             )
+            if model_id and _is_deprecated(item):
+                continue
         else:
             continue
         if model_id and model_id not in seen:

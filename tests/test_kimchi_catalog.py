@@ -51,6 +51,28 @@ def test_lenient_dedupes_and_ignores_junk(registry, fake_urllib):
     assert _profile().fetch_models(api_key="sk-test") == ["kimi-k3", "kimi-k2.5"]
 
 
+def test_live_metadata_shape_slug_and_deprecated_filter(registry, fake_urllib):
+    # Recorded live shape (OQ-A1, 2026-09-25): ids under "slug", retired
+    # models carry a past "deprecated_at".
+    fake_urllib.payload = {
+        "models": [
+            {
+                "slug": "claude-opus-4-7",
+                "provider": "anthropic",
+                "tool_call": True,
+                "deprecated_at": "2027-04-16T00:00:00Z",  # future — kept
+                "limits": {"context_window": 1000000},
+            },
+            {
+                "slug": "kimi-k2.5",
+                "deprecated_at": "2020-01-01T00:00:00Z",  # past — skipped
+            },
+            {"slug": "kimi-k3"},  # no timestamp — kept
+        ]
+    }
+    assert _profile().fetch_models(api_key="sk-test") == ["claude-opus-4-7", "kimi-k3"]
+
+
 def test_unrecognized_shape_returns_none(registry, fake_urllib):
     fake_urllib.payload = {"unexpected": {"nesting": True}}
     assert _profile().fetch_models(api_key="sk-test") is None
