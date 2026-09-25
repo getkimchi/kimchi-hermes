@@ -63,8 +63,9 @@ advertise elicitation support
 (`kimchi-harness/src/modes/acp/acp-ui-context.test.ts:188-229`). Hermes'
 shim neither advertises elicitation nor answers these requests (it
 cancels — see #1), so such confirms resolve to "no"/cancelled (fail-safe).
-Under YOLO this should only affect non-tool confirms; adversarial turns are
-part of e2e verification (SPEC §OQ-B3) and outcomes will be recorded here.
+Under YOLO this should only affect non-tool confirms; a tool-executing probe
+(2026-09-25) saw zero confirm/permission traffic (SPEC §OQ-B3). The non-tool
+confirm fallback path remains unexercised.
 
 ### 3. No true streaming; per-request cold start (Hermes shim limitation)
 
@@ -83,14 +84,24 @@ discarded (`agent/copilot_acp_client.py::_render_message_content`). Vision
 through `kimchi-acp` is not supported in v1. The API-key path (`kimchi`)
 is unaffected.
 
-### 5. Tool-routing collision under YOLO (under investigation — key risk)
+### 5. Tool routing — RESOLVED (2026-09-25, probes/acp_tool_execution_probe.py)
 
-Under YOLO the Kimchi harness executes its own tools during a turn, while
-Hermes' shim instructs the agent to emit OpenAI-shaped tool-call text
-blocks that Hermes then executes itself. Whether both happen on the same
-turn (double execution) and how to route tools (harness-side vs
-Hermes-side) is the main open question (SPEC §OQ-B4); resolution options
-and the e2e probe plan are in the spec.
+The Kimchi harness **executes its own tools for real** when driven over
+ACP in YOLO mode (probe: live tool_call updates, filesystem artifact
+verified). Consequences, in order of importance:
+
+1. **Harness-side execution is invisible to Hermes** — the shim forwards
+   only text, so Hermes' transcript carries no tool records. The model
+   itself cannot verify its prior turn's work from the flattened context
+   (observed: a "did you do it?" self-doubt loop that re-did the task).
+2. **Hermes' forwarded toolset is effectively unused** — the harness
+   prefers its native tools under YOLO.
+3. **Double-execution was NOT observed** — the model narrates results
+   instead of emitting re-runnable tool-call blocks; residual risk noted.
+
+Practical guidance: use `kimchi-acp` for harness-native agentic work and
+trust-but-verify its claims (check artifacts on disk), or use the `kimchi`
+API-key layer when you want Hermes' tool pipeline fully in charge.
 
 ### 6. Model picker contents (resolved — shipped unfiltered)
 
@@ -123,8 +134,10 @@ maintainers before proposing a bundled-provider PR.
   lists 20 live models; model switch + real turn on `glm-5.3-flash`
   succeeded (~41 t/s, `reasoning_effort: medium` accepted — SPEC OQ-A2
   default path works).
-- **Layer 2 (`kimchi-acp`)**: catalog probe verified live (31 models after
-  pseudo-entry filtering); real-turn verification pending (OQ-B4).
+- **Layer 2 (`kimchi-acp`) verified end-to-end** (2026-09-25): live catalog,
+  model selection via config options, session-default placeholder, and
+  harness-native tool execution confirmed by probe (OQ-B3/B4 resolved;
+  see roadmap #5).
 - Ops note: `./install.sh` is a plain copy into `~/.hermes` — **re-run it
   after every plugin change**; Hermes does not watch the plugin files (a
   stale copy caused the 0-models incident on 2026-09-25).
