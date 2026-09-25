@@ -179,6 +179,12 @@ kimchi_acp = KimchiACPProfile(
     env_vars=(),  # managed by the ACP subprocess
     base_url="acp://kimchi",  # ACP internal scheme
     auth_type="external_process",
+    # Placeholder model id meaning "harness session default" — parity with
+    # upstream copilot-acp's documented `--model copilot-acp` usage. Merged
+    # into the /model picker alongside the live session catalog (models.py
+    # merge_profile_catalog), and accepted by KimchiACPClient as a no-model-
+    # -selection request. Only surfaces when the live probe fails otherwise.
+    fallback_models=("kimchi-acp",),
     # How to launch the harness; KIMCHI_ACP_ARGS lets users override the argv
     # tail (e.g. drop --yolo). See module docstring for the empty-string trap.
     process_command="kimchi",

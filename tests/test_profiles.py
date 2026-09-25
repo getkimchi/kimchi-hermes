@@ -42,6 +42,9 @@ def test_kimchi_acp_registered_and_fields(registry):
     assert profile.process_args == ("--mode", "acp", "--yolo")
     assert profile.process_command_env_vars == ("KIMCHI_ACP_COMMAND",)
     assert profile.process_args_env_var == "KIMCHI_ACP_ARGS"
+    # Placeholder id meaning "harness session default" — validates in the
+    # /model picker and is treated as no-selection by the client subclass.
+    assert profile.fallback_models == ("kimchi-acp",)
 
 
 def test_plugin_yaml_manifests():
