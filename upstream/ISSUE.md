@@ -16,12 +16,17 @@ We'd like to contribute first-class support for [Kimchi](https://kimchi.dev)
 turn over Agent Client Protocol, the same pattern as `copilot-acp`).
 
 Both are implemented, tested, and verified end-to-end (TUI + Desktop on
-macOS arm64); the working branch is ready to PR. Before opening it we wanted
-to confirm placement is welcome: we saw the standalone-plugin guidance for
-memory providers and product integrations, but also 38 bundled
-`model-providers` with additions as recent as this month (`commandcode`,
-`kilocode`, `arcee`), so we read in-tree model-provider plugins as still
-accepted — please correct us if that changed.
+macOS arm64); the working branch is ready to PR. **One question first —
+placement.** We saw the standalone-plugin guidance for memory providers and
+product integrations, and also the plugin catalog's standalone provider
+precedents (`kiro-provider`, `telnyx-provider` — the latter
+vendor-maintained, `category: models`). At the same time, 38 bundled
+`model-providers` exist with in-tree additions as recent as this month
+(`commandcode`, `kilocode`, `arcee`). **Which do you prefer for Kimchi —
+bundled in-tree (PR ready) or a vendor-maintained standalone plugin with a
+catalog entry (Telnyx pattern)?** We're the Kimchi maintainers, so the
+standalone route also gives us direct update autonomy; happy with either.
+Please correct us if the policy changed.
 
 **What the providers do**
 
