@@ -30,8 +30,7 @@ tests. No core changes, no new dependencies.
 
 ## Related Issue
 
-Fixes #<issue-number> *(intro issue linked here once filed — it carries the
-verification evidence and the placement question)*
+Fixes #126026 *(intro issue carries the verification evidence and the placement question)*
 
 ## Type of Change
 
