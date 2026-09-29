@@ -59,6 +59,15 @@ Please correct us if the policy changed.
 3. The gateway's WAF 403s catalog probes without `Accept: application/json`
    (the base `fetch_models` already sends it — profiles must not override
    the UA/header set).
+4. Cross-provider default model ids leak into provider-scoped requests:
+   a bot profile with an empty Model field resolves to the global
+   `model.default` id (e.g. `anthropic/claude-opus-4.6`) even when the
+   provider is switched; Kimchi's gateway 400s unknown ids with
+   `no registered providers found for the requested model`, which the
+   built-in classifier's phrase table misses (degrades to generic
+   `format_error`). Our profile classifies it as `model_not_found`; a
+   core-side option would be provider-scoped defaults for empty model
+   fields on bot profiles.
 
 **Verification** (macOS arm64, managed install)
 

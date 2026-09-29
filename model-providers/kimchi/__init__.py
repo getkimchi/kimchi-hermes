@@ -83,6 +83,22 @@ def _lenient_model_ids(payload):
 class KimchiProfile(ProviderProfile):
     """Kimchi — API-key provider; catalog from the metadata endpoint."""
 
+    def classify_api_error(self, error=None, *, status_code=None, error_code=None, message=None, body=None, model=None):
+        """Kimchi's gateway 400s unknown model ids with a routing-specific
+        body: "no registered providers found for the requested model" (it
+        routes provider/model ids; an id from another provider's catalog —
+        e.g. a leaked global model.default — misses every route). The built-in
+        classifier's phrase table doesn't cover that body, so the failure
+        degrades to generic format_error ("switch provider or send
+        diagnostics"). Classify as model_not_found so Hermes' model-not-found
+        recovery applies instead; hints mirror the built-in verdict
+        (agent/error_classifier.py::_ABORT_FALLBACK) exactly.
+        """
+        haystack = f"{message or ''} {body or ''}"
+        if status_code == 400 and "no registered providers found" in haystack:
+            return {"reason": "model_not_found", "retryable": False, "should_fallback": True}
+        return None
+
     def fetch_models(self, *, api_key=None, base_url=None, timeout=8.0):
         """Live catalog, tolerating non-OpenAI metadata shapes (OQ-A1).
 
