@@ -68,6 +68,15 @@ Please correct us if the policy changed.
    `format_error`). Our profile classifies it as `model_not_found`; a
    core-side option would be provider-scoped defaults for empty model
    fields on bot profiles.
+5. GUI-launched surfaces hit two environment walls for external-process
+   providers: the Desktop app runs with a minimal PATH
+   (`/usr/bin:/bin:/usr/sbin:/sbin`), so CLIs in user paths (e.g.
+   `~/.local/bin`) don't resolve via `shutil.which`; and profile-scoped
+   Desktop bots run in their own `~/.hermes/profiles/<name>/` homes whose
+   plugin dirs need their own install. Both are user-fixable (env var +
+   per-profile install), but a core-side nicety would be resolving
+   external-process commands against common user-path locations or
+   surfacing the effective PATH in the error.
 
 **Verification** (macOS arm64, managed install)
 
