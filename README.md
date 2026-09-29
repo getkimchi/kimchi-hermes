@@ -25,7 +25,8 @@ See [`SPEC.md`](SPEC.md) for the full spec, evidence table, and decision log.
 
 ### Install
 
-The repo is a two-plugin monorepo; install one or both layers by path:
+The repo is a two-plugin monorepo; install one or both layers by path
+(run from any directory — the CLI resolves the repo itself):
 
 ```bash
 # Layer 1 — API-key model provider
