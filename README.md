@@ -13,17 +13,83 @@ Both are user-level plugins: they install into
 `~/.hermes/plugins/model-providers/` and require no changes to Hermes core.
 See [`SPEC.md`](SPEC.md) for the full spec, evidence table, and decision log.
 
-## Install
+## Quick start
+
+### Prerequisites
+
+- [Hermes Agent](https://github.com/NousResearch/hermes-agent) — CLI or Desktop app
+- A Kimchi API key — get one at https://app.kimchi.dev
+- `kimchi-acp` only: the [Kimchi CLI](https://kimchi.dev) installed and logged in
+  (`kimchi login`). The harness subprocess owns its own auth; no key is shared
+  with Hermes.
+
+### Install
+
+The repo is a two-plugin monorepo; install one or both layers by path:
 
 ```bash
+# Layer 1 — API-key model provider
+hermes plugins install getkimchi/kimchi-hermes/model-providers/kimchi
+
+# Layer 2 — ACP external-process provider (primary use case)
+hermes plugins install getkimchi/kimchi-hermes/model-providers/kimchi-acp
+```
+
+Pin an exact commit with `--ref <40-char-sha>`; update with
+`hermes plugins update`; remove with `hermes plugins remove`.
+
+### Authenticate
+
+```bash
+# Layer 1 — put the key where Hermes reads it
+export KIMCHI_API_KEY=...          # or persist in ~/.hermes/.env
+
+# Layer 2 — the CLI holds its own credentials
+kimchi login
+```
+
+### Pick a model and send a turn
+
+```bash
+hermes model        # pick "Kimchi" or "Kimchi (Harness via ACP)"
+hermes              # say hello — you're on Kimchi
+```
+
+Or make it the default in `~/.hermes/config.yaml`:
+
+```yaml
+model:
+  default: glm-5.3-flash
+  provider: kimchi
+```
+
+Verify `kimchi-acp` is really driving the harness: tool-using turns show
+harness-native activity as inline bullets in the reply
+(`- ⚙ **web_search** ✓ — …`).
+
+### Troubleshooting
+
+- **Model picker shows 0 Kimchi models** — the installed copy is stale;
+  re-install and restart Hermes (plugin files are not hot-reloaded).
+- **Profile-scoped Desktop bots don't see the plugin** — each
+  `~/.hermes/profiles/*/` home has separate plugin dirs; use the
+  [manual install](#manual--multi-profile-install).
+- **ACP spawn fails inside the Desktop app** — GUI apps don't inherit your
+  shell PATH; point `KIMCHI_ACP_COMMAND` at the absolute binary path
+  (e.g. `launchctl setenv KIMCHI_ACP_COMMAND /Users/you/.local/bin/kimchi`).
+
+## Manual / multi-profile install
+
+```bash
+git clone https://github.com/getkimchi/kimchi-hermes
+cd kimchi-hermes
 ./install.sh          # copies model-providers/* into ~/.hermes/plugins/model-providers/
 hermes model          # pick "Kimchi" or "Kimchi (Harness via ACP)"
 ```
 
-Requirements:
-- `kimchi` — a Kimchi API key (get one at https://app.kimchi.dev)
-- `kimchi-acp` — the Kimchi CLI installed and logged in (`kimchi login`);
-  no key is shared with Hermes (the subprocess owns its own auth)
+`install.sh` also targets every `~/.hermes/profiles/*/` plugin home, which is
+what profile-scoped Desktop bots need. Hermes does not watch plugin files —
+re-run it after every plugin change.
 
 ## Environment variables
 
