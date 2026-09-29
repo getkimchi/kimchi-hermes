@@ -3,3 +3,8 @@ kind: model-provider
 version: 1.0.0
 description: Kimchi (kimchi.dev) models via OpenAI-compatible API
 author: Zilvinas Urbonas
+requires_env:
+  - name: KIMCHI_API_KEY
+    description: Kimchi API key for model inference
+    url: https://app.kimchi.dev
+    secret: true

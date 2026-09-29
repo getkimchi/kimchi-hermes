@@ -44,6 +44,7 @@ Pin an exact commit with `--ref <40-char-sha>`; update with
 ```bash
 # Layer 1 — put the key where Hermes reads it
 export KIMCHI_API_KEY=...          # or persist in ~/.hermes/.env
+# (the installer prompts for it automatically if it is not already set)
 
 # Layer 2 — the CLI holds its own credentials
 kimchi login
