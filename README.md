@@ -199,7 +199,8 @@ cannot reach will be documented here after e2e.
 These plugins ship user-level first. Hermes' contribution policy has been
 closing in-tree third-party plugin categories in favor of standalone
 distribution (`CONTRIBUTING.md`, memory-provider closure); confirm with the
-maintainers before proposing a bundled-provider PR.
+maintainers before proposing a bundled-provider PR. The full submission
+checklist lives in [`UPSTREAM.md`](UPSTREAM.md).
 
 ## Status
 
