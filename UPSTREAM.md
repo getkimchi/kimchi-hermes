@@ -11,6 +11,38 @@ as a checklist. Status snapshot and the full decision log live in
 [#126026](https://github.com/NousResearch/hermes-agent/issues/126026) is
 OPEN with no maintainer response yet. Everything else is staged.
 
+## Staged materials & pointers
+
+| What | Where |
+|---|---|
+| Upstream issue (placement question) | https://github.com/NousResearch/hermes-agent/issues/126026 |
+| Upstream repo (local clone) | `~/.hermes/hermes-agent` |
+| Prepared PR branch | `feat/kimchi-providers` — commits `5224c91365`, `35b385646c`, pushed to fork `zilvinasu/hermes-agent` |
+| PR body (template-following, `Fixes #126026`) | [`upstream/PR.md`](upstream/PR.md) |
+| Issue text as filed | [`upstream/ISSUE.md`](upstream/ISSUE.md) |
+| Their contribution guide | `~/.hermes/hermes-agent/CONTRIBUTING.md` (1020 lines; the two load-bearing sections: *Memory Providers: Ship as a Standalone Plugin* and *Third-Party Product Integrations: Ship as a Standalone Plugin*) |
+| Their PR template | `~/.hermes/hermes-agent/.github/pull_request_template.md` (CI auto-labels from its checklist) |
+| Catalog admission docs | `website/docs/user-guide/features/plugin-catalog.md` § *Submitting a plugin to the catalog* + the [`plugin-catalog/` README](https://github.com/NousResearch/hermes-agent/tree/main/plugin-catalog) (authoritative entry schema) |
+| Plugin manifest used by the installer | this repo's `model-providers/*/plugin.yaml` — includes `requires_env` (masked install-time key prompt → `~/.hermes/.env`) |
+
+## Verification & monitoring commands
+
+```bash
+# Watch the placement answer
+gh issue view 126026 --repo NousResearch/hermes-agent --json state,comments
+
+# Re-verify the staged branch against upstream main
+cd ~/.hermes/hermes-agent && git checkout feat/kimchi-providers && git rebase origin/main
+scripts/run_tests.sh tests/plugins/model_providers tests/providers   # hermetic, CI parity
+scripts/check-windows-footguns.py   # grep-based, cheap, CI runs it too
+ruff check .
+
+# Validate plugin manifests the way the catalog gate will
+hermes plugins validate model-providers/kimchi
+hermes plugins validate model-providers/kimchi-acp
+hermes plugins doctor model-providers/kimchi   # real-runtime contract check
+```
+
 ---
 
 ## The one decision everything hangs on
@@ -143,3 +175,10 @@ description: Kimchi (kimchi.dev) models via OpenAI-compatible API
 Repeat for `subdir: model-providers/kimchi-acp`. The installer resolves
 `repo#subdir` natively (`_resolve_git_url`), so monorepo entries are a
 first-class pattern — same shape as our README quick-start commands.
+
+> **Caveat:** the YAML above was drafted from the documented schema
+> (plugin-catalog docs, 2026-09-29). Catalog tooling evolves — re-check the
+> exact field list against the `plugin-catalog/` README on upstream `main`
+> **at submission time**, and dry-run with `hermes plugins validate` + the
+> catalog validation action before opening the PR. If the field list has
+> drifted, trust the README over this file.
