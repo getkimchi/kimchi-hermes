@@ -99,11 +99,13 @@ def _kimchi_logged_in() -> bool:
 
 try:
     # Only importable inside the Hermes runtime; the guard keeps this module
-    # importable standalone (tooling/tests). Without Hermes, create_client
-    # fails loudly only when actually invoked.
+    # importable standalone (tooling/tests). A failure here is never final:
+    # _kimchi_client_class() retries the import on every client build, so a
+    # transient breakage (e.g. a Hermes self-update briefly making vendored
+    # deps unimportable) self-heals instead of poisoning the process.
     from agent.copilot_acp_client import CopilotACPClient as _ACPClientBase
 except ImportError:  # pragma: no cover - exercised via stubs in tests
-    _ACPClientBase = object
+    _ACPClientBase = None
 
 
 def _content_excerpt(update) -> str:
@@ -134,8 +136,12 @@ def _content_excerpt(update) -> str:
     return text
 
 
-class KimchiACPClient(_ACPClientBase):
-    """CopilotACPClient with Kimchi-facing error strings and placeholder handling."""
+class _KimchiACPClientMixin:
+    """Kimchi overrides for the Hermes ACP shim (base-agnostic).
+
+    Defined as a mixin so the concrete class can bind to the shim base
+    lazily — see _kimchi_client_class for why that binding must be retryable.
+    """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -248,11 +254,53 @@ class KimchiACPClient(_ACPClientBase):
         )
 
 
+# Concrete class bound at import time when the shim is importable (healthy
+# Hermes runtime, hermetic test stubs). When it is not — standalone import,
+# or a Hermes process started inside a self-update window — it stays None
+# and create_client resolves it lazily via _kimchi_client_class().
+if _ACPClientBase is not None:
+
+    class KimchiACPClient(_KimchiACPClientMixin, _ACPClientBase):
+        pass
+
+else:
+    KimchiACPClient = None
+
+
+def _kimchi_client_class():
+    """Return the concrete KimchiACPClient class, retrying a failed shim import.
+
+    Never cache an import failure. On 2026-10-05 (and 2026-09-29) a Hermes
+    self-update made the shim's transitive imports fail for processes started
+    in the update window; the old module-level `except ImportError: base =
+    object` cached that failure for the process lifetime, every create_client
+    raised `TypeError: object.__init__() takes exactly one argument`, and
+    Hermes fell back to its standard client with the acp://kimchi base — the
+    user-facing "Could not reach the AI service". Retrying here self-heals
+    once the runtime is consistent again; while it is not, the raised
+    RuntimeError names the actual cause instead of a TypeError from object.
+    """
+    global KimchiACPClient
+    if KimchiACPClient is not None:
+        return KimchiACPClient
+    try:
+        from agent.copilot_acp_client import CopilotACPClient as base
+    except ImportError as exc:
+        raise RuntimeError(
+            "kimchi-acp: Hermes' ACP shim (agent.copilot_acp_client) is not "
+            f"importable in this Hermes process ({exc}). This is typically "
+            "transient right after a Hermes self-update — restart Hermes "
+            "(or reopen the Desktop app) and retry."
+        ) from exc
+    KimchiACPClient = type("KimchiACPClient", (_KimchiACPClientMixin, base), {})
+    return KimchiACPClient
+
+
 class KimchiACPProfile(ProviderProfile):
     """Kimchi harness over ACP stdio — `kimchi --mode acp --yolo`."""
 
     def create_client(self, **client_kwargs):
-        return KimchiACPClient(**client_kwargs)
+        return _kimchi_client_class()(**client_kwargs)
 
     def fetch_models(self, *, api_key=None, base_url=None, timeout=15.0):
         """Model ids advertised by a short-lived signed-in ACP session.

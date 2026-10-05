@@ -126,6 +126,65 @@ def test_client_env_args_respected_in_fallback(registry, fake_acp, monkeypatch):
     assert list(client._acp_args) == ["--mode", "acp"]
 
 
+def test_create_client_self_heals_after_transient_shim_failure(registry, monkeypatch):
+    """2026-10-05 incident (also 2026-09-29): a Hermes self-update made the
+    shim's transitive imports fail in processes started during the update
+    window; the old module-level guard cached base=object, every create_client
+    raised TypeError, and Hermes fell back to its standard client with the
+    acp://kimchi base ("Could not reach the AI service"). A failed import must
+    NOT be cached: once the runtime is consistent again, create_client recovers.
+    """
+    import sys
+    import types
+
+    # Broken window: `agent` importable but the shim module unavailable
+    # (None in sys.modules makes `from agent.copilot_acp_client import …`
+    # raise ImportError — the mid-update equivalent).
+    monkeypatch.setitem(sys.modules, "agent", types.ModuleType("agent"))
+    monkeypatch.setitem(sys.modules, "agent.copilot_acp_client", None)
+    module = load_plugin("kimchi-acp")
+    assert module.KimchiACPClient is None  # failure must not be cached as a class
+
+    # Runtime heals: the shim becomes importable again.
+    class FakeCopilotACPClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self._acp_command = kwargs.get("command") or "copilot"
+            self._acp_args = list(kwargs.get("args") or ["--acp", "--stdio"])
+            self.base_url = kwargs.get("base_url") or "acp://copilot"
+
+    client_mod = types.ModuleType("agent.copilot_acp_client")
+    client_mod.CopilotACPClient = FakeCopilotACPClient
+    agent_mod = types.ModuleType("agent")
+    agent_mod.copilot_acp_client = client_mod
+    monkeypatch.setitem(sys.modules, "agent", agent_mod)
+    monkeypatch.setitem(sys.modules, "agent.copilot_acp_client", client_mod)
+
+    client = module.kimchi_acp.create_client(command="kimchi", args=("--mode", "acp", "--yolo"))
+    assert type(client).__name__ == "KimchiACPClient"
+    assert type(client).__mro__[2].__name__ == "FakeCopilotACPClient"
+    # The mixin overrides still apply on the lazily built class.
+    assert client._acp_command == "kimchi"
+    assert tuple(client._acp_args) == ("--mode", "acp", "--yolo")
+    assert client.base_url == "acp://kimchi"
+
+
+def test_create_client_missing_shim_raises_actionable_error(registry, monkeypatch):
+    """While the runtime is still broken, create_client fails with Kimchi
+    guidance (not the old TypeError from object.__init__)."""
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "agent", types.ModuleType("agent"))
+    monkeypatch.setitem(sys.modules, "agent.copilot_acp_client", None)
+    module = load_plugin("kimchi-acp")
+    with pytest.raises(RuntimeError) as excinfo:
+        module.kimchi_acp.create_client()
+    message = str(excinfo.value)
+    assert "agent.copilot_acp_client" in message
+    assert "restart Hermes" in message
+
+
 def test_placeholder_model_skips_selection(profile):
     client = profile.create_client()
     client._run_prompt("hi", timeout_seconds=5, model="kimchi-acp")
