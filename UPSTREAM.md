@@ -4,10 +4,19 @@ How to land Kimchi provider support in
 [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent).
 **Decision (2026-10-05): standalone repo + curated plugin catalog** —
 the former "Path B". The placement question
-([#126026](https://github.com/NousResearch/hermes-agent/issues/126026),
-still open, 0 maintainer comments) is now answered by upstream's own
-repo state — evidence below. Full decision log lives in
-[`SPEC.md`](SPEC.md).
+([#126026](https://github.com/NousResearch/hermes-agent/issues/126026))
+was answered by upstream's own repo state — evidence below. Full
+decision log lives in [`SPEC.md`](SPEC.md).
+
+**Status (2026-10-05): SUBMITTED** — catalog PRs
+[#133165](https://github.com/NousResearch/hermes-agent/pull/133165)
+(`kimchi-provider`) and
+[#133166](https://github.com/NousResearch/hermes-agent/pull/133166)
+(`kimchi-acp-provider`) are open; `main` and tag `v1.0.0` are pushed;
+the loop on #126026 is closed
+([comment](https://github.com/NousResearch/hermes-agent/issues/126026#issuecomment-5989285234)).
+Remaining: watch the catalog validation actions, respond to review,
+promote in Discord.
 
 ## Why standalone — the evidence (upstream `main` @ `c2346276`, 2026-10-05)
 
@@ -40,7 +49,9 @@ at the bottom of this file.
 | Catalog entry — `kimchi-acp-provider` | [`upstream/plugin-catalog/kimchi-acp-provider.yaml`](upstream/plugin-catalog/kimchi-acp-provider.yaml) |
 | Pinned SHA (both entries) | `f3da18f16dff7220c909227f687b5885ab729f66` — the commit adding the per-plugin READMEs the catalog page renders |
 | Per-plugin READMEs (rule 13 disclosures) | `model-providers/kimchi/README.md`, `model-providers/kimchi-acp/README.md` |
-| Placement issue (unanswered) | https://github.com/NousResearch/hermes-agent/issues/126026 |
+| Placement issue + closing comment | [#126026 (comment)](https://github.com/NousResearch/hermes-agent/issues/126026#issuecomment-5989285234) |
+| PR body — `kimchi-provider` | [`upstream/PR-catalog-kimchi-provider.md`](upstream/PR-catalog-kimchi-provider.md) |
+| PR body — `kimchi-acp-provider` | [`upstream/PR-catalog-kimchi-acp-provider.md`](upstream/PR-catalog-kimchi-acp-provider.md) |
 | Upstream repo (local clone) | `~/.hermes/hermes-agent` |
 
 ## Submission checklist
@@ -59,18 +70,21 @@ at the bottom of this file.
       renders the README from the subdir at the pinned SHA)
 - [x] Entries drafted against the verified schema, capabilities
       matching reality (rule 6)
-- [ ] Push `main` (contains the pinned commit)
-- [ ] Tag `v1.0.0` on the pinned commit — hygiene only; the catalog
+- [x] Push `main` (contains the pinned commit) — done 2026-10-05
+      (`98ff317..3e419d2`)
+- [x] Tag `v1.0.0` on the pinned commit — hygiene only; the catalog
       does **not** require tags ("`version` … is cosmetic … the sha
       stays the release")
-- [ ] Open PR #1: `plugin-catalog/kimchi-provider.yaml` — one entry
-      file per PR, from a fork branch off upstream `main`
-- [ ] Open PR #2: `plugin-catalog/kimchi-acp-provider.yaml`
-- [ ] PR bodies carry the rule-13 disclosure lines (below)
+- [x] Open PR #1: `plugin-catalog/kimchi-provider.yaml` — one entry
+      file per PR, from a fork branch off upstream `main` →
+      [#133165](https://github.com/NousResearch/hermes-agent/pull/133165)
+- [x] Open PR #2: `plugin-catalog/kimchi-acp-provider.yaml` →
+      [#133166](https://github.com/NousResearch/hermes-agent/pull/133166)
+- [x] PR bodies carry the rule-13 disclosure lines (below)
 - [ ] Catalog validation action green on both PRs; respond to review
       (SHA bumps later = new PR + `version` bump in the same PR)
-- [ ] Close the loop on #126026 with a comment linking the entries
-      (helps the next third-party provider author)
+- [x] Close the loop on #126026 with a comment linking the entries
+      ([posted](https://github.com/NousResearch/hermes-agent/issues/126026#issuecomment-5989285234))
 - [ ] Promote in the Nous Research Discord
       [`#plugins-skills-and-skins`](https://discord.gg/NousResearch)
 
