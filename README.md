@@ -79,6 +79,11 @@ harness-native activity as inline bullets in the reply
 - **ACP spawn fails inside the Desktop app** — GUI apps don't inherit your
   shell PATH; point `KIMCHI_ACP_COMMAND` at the absolute binary path
   (e.g. `launchctl setenv KIMCHI_ACP_COMMAND /Users/you/.local/bin/kimchi`).
+- **Project skills/config don't load through `kimchi-acp`** — the harness
+  runs the session **untrusted** in projects it was never approved for
+  (Hermes can't answer the harness's trust prompt; roadmap #9). Run
+  `kimchi` once interactively in that project and approve it, or set
+  `defaultProjectTrust: "always"` in the Kimchi global settings.
 
 ## Manual / multi-profile install
 
@@ -98,7 +103,7 @@ re-run it after every plugin change.
 | Variable | Plugin | Purpose |
 |---|---|---|
 | `KIMCHI_API_KEY` | kimchi | API key (checked before `~/.hermes/.env`) |
-| `KIMCHI_BASE_URL` | kimchi | Override the inference gateway base URL |
+| `KIMCHI_BASE_URL` | kimchi | Override the inference gateway base URL — for the plugin this is the **OpenAI base including `/openai/v1`** (e.g. `https://llm.eu.kimchi.dev/openai/v1`; needed for EU/self-hosted keys). **Name collision:** the Kimchi harness reads the same-named variable with *bare* gateway-base semantics (no path — it appends `/openai/v1` itself) and its env override beats its own region config, so a shell-wide export also mis-derives the endpoints of the harness spawned by `kimchi-acp`. For non-US regions prefer the harness's own region selection (`KIMCHI_REGION`, or region choice at `kimchi login`) and scope `KIMCHI_BASE_URL` to where Hermes reads it |
 | `KIMCHI_ACP_COMMAND` | kimchi-acp | Override the spawned binary (default `kimchi`) |
 | `KIMCHI_ACP_ARGS` | kimchi-acp | Override spawn args. **Note: empty string falls back to the default args** (including `--yolo`); to run *without* YOLO set `KIMCHI_ACP_ARGS="--mode acp"` |
 
@@ -201,6 +206,25 @@ closing in-tree third-party plugin categories in favor of standalone
 distribution (`CONTRIBUTING.md`, memory-provider closure); confirm with the
 maintainers before proposing a bundled-provider PR. The full submission
 checklist lives in [`UPSTREAM.md`](UPSTREAM.md).
+
+### 9. Project trust gates project-scoped resources on the ACP path (Kimchi change 2026-09-28; Hermes limitation)
+
+Since harness #1266 (LLM-3628), a headless ACP session resolves project
+trust **fail-closed**: when the working directory has trust-requiring
+resources (project skills, `.kimchi/`/`.claude/` config, permissions,
+hooks, `.pi/settings.json`) and no stored decision, the session starts
+untrusted and **silently drops all project-scoped resources**
+(`kimchi-harness/src/project-trust.ts`, `src/modes/acp/server.ts`
+`createSessionSettings`). The same commit added the client-side fix — a
+`_kimchi.dev/project_trust_update` push plus a `set_project_trust` ext
+method (Kimchi Studio prompts and un-blocks live) — but Hermes' shim can
+neither call ext methods nor surface the push, so through `kimchi-acp`
+the decision stays undecided and the drop persists. YOLO does **not**
+bypass this: trust gates project-scoped resources, YOLO only gates
+tool-approval prompts. User recovery: run `kimchi` once interactively in
+the project (persists the decision to the harness's trust store), or set
+`defaultProjectTrust: "always"` globally. Real support means upstreaming
+trust handling into Hermes' ACP shim — same bucket as #1.
 
 ## Status
 

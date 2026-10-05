@@ -163,6 +163,14 @@ kimchi_acp = KimchiACPProfile(
   no `session/request_permission` traffic for tool approvals (F3).
   Without YOLO, Hermes' shim auto-cancels permission requests (F12) —
   fail-safe denial, documented gap (README #1).
+- **Project trust (LLM-3628, harness #1266, 2026-09-28)**: headless ACP
+  sessions resolve project trust fail-closed — an undecided project with
+  trust-requiring resources starts untrusted and silently drops project
+  skills/config/`.pi` settings. Hermes' shim cannot answer the harness's
+  `_kimchi.dev/set_project_trust` ext method, so the drop persists on the
+  `kimchi-acp` path (README #9); recovery is an interactive `kimchi` run
+  in the project or `defaultProjectTrust: "always"`. YOLO does not bypass
+  trust.
 - **Keyless spawn**: if Kimchi has no stored credential, the error surfaces
   Kimchi's "Call session/authenticate" hint, which Hermes' shim cannot act
   on. Setup/doc must point users at `kimchi login` as the recovery path

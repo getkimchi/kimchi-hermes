@@ -52,7 +52,7 @@ never a stale list.
 | Variable | Purpose |
 |---|---|
 | `KIMCHI_API_KEY` | API key (required; checked before `~/.hermes/.env`) |
-| `KIMCHI_BASE_URL` | Override the inference gateway base URL |
+| `KIMCHI_BASE_URL` | Override the inference gateway base URL — must include the `/openai/v1` path (e.g. `https://llm.eu.kimchi.dev/openai/v1`). Caution: the Kimchi harness reads the same-named variable with *bare* gateway-base semantics (no path, it appends `/openai/v1` itself); avoid exporting it shell-wide when you also use `kimchi-acp` — see the [monorepo README](https://github.com/getkimchi/kimchi-hermes#readme) env table |
 
 ## Behaviour & disclosures
 
