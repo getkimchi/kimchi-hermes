@@ -21,9 +21,11 @@ def test_kimchi_registered_and_fields(registry):
     assert profile.models_url == "https://llm.kimchi.dev/v1/models/metadata?include_in_cli=true"
     assert profile.auth_type == "api_key"
     assert profile.fallback_models == ()  # live catalog only — user decision
-    # No custom UA declared — the base class's WAF-safe hermes-cli UA must win
-    # (the stub only records fields the plugin explicitly passes).
-    assert not getattr(profile, "default_headers", {}).get("User-Agent")
+    # Attribution UA rides the profile: Hermes core forwards
+    # profile.default_headers to every OpenAI-mode client built under it,
+    # and the urllib catalog probe applies them over the hermes-cli fallback.
+    assert profile.default_headers.get("User-Agent", "").startswith("hermes-agent")
+    assert "(kimchi-plugin)" in profile.default_headers["User-Agent"]
 
 
 def test_kimchi_acp_registered_and_fields(registry):
@@ -49,14 +51,14 @@ def test_kimchi_acp_registered_and_fields(registry):
 
 def test_plugin_yaml_manifests():
     expected = {
-        "kimchi": "kimchi-provider",
-        "kimchi-acp": "kimchi-acp-provider",
+        "kimchi": ("kimchi-provider", "1.1.0"),
+        "kimchi-acp": ("kimchi-acp-provider", "1.0.0"),
     }
-    for plugin_name, manifest_name in expected.items():
+    for plugin_name, (manifest_name, version) in expected.items():
         text = (PLUGIN_DIR / plugin_name / "plugin.yaml").read_text(encoding="utf-8")
         assert f"name: {manifest_name}" in text
         assert "kind: model-provider" in text
-        assert "version: 1.0.0" in text
+        assert f"version: {version}" in text
 
 
 def test_install_script_copies_both_plugins(tmp_path):

@@ -19,6 +19,13 @@ except Exception:  # pragma: no cover - standalone import (tests stub or omit he
 
 _USER_AGENT = f"hermes-cli/{_HERMES_VERSION}" if _HERMES_VERSION else "hermes-cli"
 
+# Hermes forwards profile.default_headers to its OpenAI clients, and the
+# fetch_models probe applies them over the hermes-cli fallback — so this one
+# UA identifies every request to our gateway.
+_CHAT_USER_AGENT = (
+    f"hermes-agent/{_HERMES_VERSION} (kimchi-plugin)" if _HERMES_VERSION else "hermes-agent (kimchi-plugin)"
+)
+
 logger = logging.getLogger(__name__)
 
 # Kimchi's own client reads its model catalog from the metadata endpoint,
@@ -164,9 +171,9 @@ kimchi = KimchiProfile(
     # Live catalog only (user decision, SPEC §3): a transient catalog failure
     # means an empty picker until recovery — never a stale hardcoded list.
     fallback_models=(),
-    # Deliberately NO custom default_headers User-Agent: the base
-    # fetch_models() already sends a WAF-safe `hermes-cli/<version>` UA and a
-    # custom one would override it (review finding).
+    # Every chat completion carries this UA; a user's model.default_headers
+    # in config.yaml can still override.
+    default_headers={"User-Agent": _CHAT_USER_AGENT},
     # Dataclass FIELD (not a method hook) — see _classify_gateway_error.
     classify_api_error=_classify_gateway_error,
 )

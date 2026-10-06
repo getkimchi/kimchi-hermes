@@ -20,7 +20,8 @@ def test_standard_openai_shape_via_metadata_endpoint(registry, fake_urllib):
     assert len(fake_urllib.calls) == 1
     assert fake_urllib.calls[0]["url"] == METADATA_URL
     assert fake_urllib.calls[0]["auth"] == "Bearer sk-test"
-    assert fake_urllib.calls[0]["ua"] == "hermes-cli/9.9.9"
+    # Profile attribution UA overwrites the base hermes-cli fallback (SPEC §3).
+    assert fake_urllib.calls[0]["ua"] == "hermes-agent/9.9.9 (kimchi-plugin)"
 
 
 def test_metadata_models_shape_parsed_leniently(registry, fake_urllib):

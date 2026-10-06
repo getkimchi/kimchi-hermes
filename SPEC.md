@@ -69,8 +69,7 @@ ProviderProfile(
     models_url="https://llm.kimchi.dev/v1/models/metadata?include_in_cli=true",  # F9
     auth_type="api_key",
     fallback_models=(),   # live catalog only — user decision
-    # No custom default_headers UA: the base class already sends a WAF-safe
-    # `hermes-cli/<version>` UA; a custom one would override it (review finding).
+    default_headers={"User-Agent": "hermes-agent/<hermes-version> (kimchi-plugin)"},
 )
 ```
 
