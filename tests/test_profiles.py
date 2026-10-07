@@ -40,8 +40,9 @@ def test_kimchi_acp_registered_and_fields(registry):
     assert profile.auth_type == "external_process"
     assert profile.env_vars == ()  # subprocess owns auth
     assert profile.process_command == "kimchi"
-    # YOLO is the user-approved default (SPEC §6).
-    assert profile.process_args == ("--mode", "acp", "--yolo")
+    # Prompts stay on by default; YOLO is opt-in via KIMCHI_ACP_ARGS
+    # (catalog review 2026-10-06, mirrors Hermes' bundled copilot-acp).
+    assert profile.process_args == ("--mode", "acp")
     assert profile.process_command_env_vars == ("KIMCHI_ACP_COMMAND",)
     assert profile.process_args_env_var == "KIMCHI_ACP_ARGS"
     # Placeholder id meaning "harness session default" — validates in the

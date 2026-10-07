@@ -4,7 +4,9 @@ Adds `kimchi-acp-provider` to the curated plugin catalog — a model
 provider (`category: models`, `tier: community`) that drives the full
 [Kimchi](https://kimchi.dev) coding harness over ACP stdio: Hermes
 spawns `kimchi --mode acp` and the harness serves each turn with its
-own tools.
+own tools. The default spawn keeps the harness's permission prompts on;
+YOLO (no approval prompts) is opt-in via `KIMCHI_ACP_ARGS` — per the
+catalog review, mirroring Hermes' bundled `copilot-acp`.
 
 Companion to #133165 (`kimchi-provider`, the API-key layer from the
 same repo). Opened as a separate PR per the one-entry-file-per-PR
@@ -32,6 +34,14 @@ ACP-shaped `kiro-acp`).
 
 - `plugin-catalog/kimchi-acp-provider.yaml` — new entry pinned to
   `getkimchi/kimchi-hermes@f3da18f16dff7220c909227f687b5885ab729f66`
+  (re-pinned to the review-fix commit at submission of this update)
+- Review fixes applied to the plugin at the pinned SHA (see
+  [`model-providers/kimchi-acp`](https://github.com/getkimchi/kimchi-hermes/tree/main/model-providers/kimchi-acp)):
+  the `--yolo` no-restrictions spawn flag is no longer the default —
+  the harness keeps its permission prompts unless the user opts in via
+  `KIMCHI_ACP_ARGS="--mode acp --yolo"`; and the key-presence disclosure
+  now states the config is parsed to check that a stored key is
+  present, never stored or sent.
 
 ## How to Test
 
@@ -75,17 +85,22 @@ ACP-shaped `kiro-acp`).
 Disclosure lines per the admission rules (also in the plugin README at
 the pinned SHA):
 
-- **Subprocess**: every turn spawns `kimchi --mode acp --yolo` and
+- **Subprocess**: every turn spawns `kimchi --mode acp` and
   speaks JSON-RPC over stdio; the process is terminated when the turn
-  ends. `--yolo` is Kimchi's designed no-restrictions permission mode:
-  **harness tools (shell commands, file writes, web requests) run
-  without approval prompts**. Without YOLO
-  (`KIMCHI_ACP_ARGS="--mode acp"`), permission requests are cancelled
-  fail-safe — Hermes' ACP shim has no human approval channel yet.
+  ends. By default the harness keeps its own tool-permission prompts;
+  because Hermes' ACP shim has no human approval channel yet, those
+  requests are cancelled fail-safe — so approval-gated tools don't run,
+  nothing executes silently. YOLO — Kimchi's no-restrictions permission
+  mode, where **harness tools (shell commands, file writes, web
+  requests) run without approval prompts** — is **opt-in**:
+  `KIMCHI_ACP_ARGS="--mode acp --yolo"` (enable only where unsupervised
+  in-harness execution is acceptable, e.g. a personal machine — not
+  shared gateway/cron contexts).
 - **Reads outside the plugin's own data**: setup status checks whether
   the Kimchi CLI is logged in by reading the Kimchi CLI's own
-  `~/.config/kimchi/config.json` — key **presence** only; the key
-  itself is never read by Hermes or sent anywhere.
+  `~/.config/kimchi/config.json` — the config is parsed only to check
+  that a stored key is present; the key itself is never stored by
+  Hermes nor sent anywhere.
 - **Auth**: the subprocess owns its own auth (its credential store) —
   no API key is shared with Hermes; `requires_env: []`.
 - **Reply rendering**: completed/failed tool calls are rendered as one

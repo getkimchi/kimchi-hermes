@@ -20,7 +20,8 @@ tests. No core changes, no new dependencies.
   `slug`, retired models filtered via `deprecated_at`); no hardcoded
   fallback list, matching the live-catalog pattern.
 - **`kimchi-acp`** — external-process ACP provider driving the local Kimchi
-  CLI (`kimchi --mode acp --yolo` by default; `KIMCHI_ACP_ARGS` /
+  CLI (`kimchi --mode acp` by default — prompts on, YOLO opt-in;
+  `KIMCHI_ACP_ARGS` /
   `KIMCHI_ACP_COMMAND` overrides). The subprocess owns its own auth — Hermes
   never handles a key on this path (same contract as `copilot-acp`). Tool
   activity from the harness is rendered into the visible reply as markdown
@@ -55,7 +56,8 @@ Fixes #126026 *(intro issue carries the verification evidence and the placement 
 4. `hermes chat --provider kimchi-acp` (Kimchi CLI installed + `kimchi login`)
    — harness runs the turn, tool activity rendered inline; Desktop verified.
    ACP probe: harness-native tool execution confirmed via filesystem
-   artifact; zero permission requests under the default YOLO mode.
+   artifact; zero permission requests under YOLO (now an opt-in spawn
+   mode).
 
 ## Checklist
 

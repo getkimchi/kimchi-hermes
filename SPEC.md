@@ -22,7 +22,7 @@ Two Hermes model-provider plugins, developed in this repo and installed into
 | Plugin | Layer | What it gives a Hermes user |
 |---|---|---|
 | `kimchi` | API-key model provider | Hermes' own agent loop drives Kimchi-served models over OpenAI-compatible HTTP (`llm.kimchi.dev`) |
-| `kimchi-acp` | ACP external-process provider | Hermes spawns `kimchi --mode acp --yolo` over stdio; the **Kimchi harness itself** serves the turn via Agent Client Protocol |
+| `kimchi-acp` | ACP external-process provider | Hermes spawns `kimchi --mode acp` over stdio (YOLO opt-in via `KIMCHI_ACP_ARGS`); the **Kimchi harness itself** serves the turn via Agent Client Protocol |
 
 Layer 2 is the primary use case (the user runs the actual Kimchi harness from
 Hermes' TUI/gateway). Layer 1 stays relevant for direct model access with
@@ -127,12 +127,12 @@ kimchi_acp = KimchiACPProfile(
     base_url="acp://kimchi",
     auth_type="external_process",
     process_command="kimchi",
-    process_args=("--mode", "acp", "--yolo"),   # YOLO default — user decision
+    process_args=("--mode", "acp"),   # prompts stay on — --yolo is opt-in
     process_command_env_vars=("KIMCHI_ACP_COMMAND",),
     process_args_env_var="KIMCHI_ACP_ARGS",
-    # NOTE (review finding): KIMCHI_ACP_ARGS="" does NOT drop --yolo — an
-    # empty env var falls back to process_args (F11). The escape hatch to
-    # run without YOLO is: KIMCHI_ACP_ARGS="--mode acp".
+    # NOTE (review finding): KIMCHI_ACP_ARGS="" does NOT clear the args — an
+    # empty env var falls back to process_args (F11). The YOLO opt-in is:
+    # KIMCHI_ACP_ARGS="--mode acp --yolo" (catalog review 2026-10-06).
 )
 ```
 
@@ -146,7 +146,7 @@ kimchi_acp = KimchiACPProfile(
 
 ### Behavior
 
-- **Turn flow**: per request, Hermes spawns `kimchi --mode acp --yolo`,
+- **Turn flow**: per request, Hermes spawns `kimchi --mode acp`,
   sends `initialize` (protocolVersion 1 — compatible, F14) + `session/new`,
   applies the requested model via `session/set_config_option` (F15), then
   sends the conversation + Hermes toolset as **one prompt** (F12 semantics).
@@ -158,10 +158,12 @@ kimchi_acp = KimchiACPProfile(
   Hermes never handles a key on this path. Whether an exported
   `KIMCHI_API_KEY` actually reaches the child is **unverified** —
   `hermes_subprocess_env` may strip it (review finding; probe in e2e, OQ-B6).
-- **Permissions**: `--yolo` default ⇒ Kimchi's tool-permission gate is off;
-  no `session/request_permission` traffic for tool approvals (F3).
-  Without YOLO, Hermes' shim auto-cancels permission requests (F12) —
-  fail-safe denial, documented gap (README #1).
+- **Permissions**: the default spawn keeps Kimchi's tool-permission gate
+  ON; with no human channel in Hermes' shim, `session/request_permission`
+  requests are auto-cancelled (F12) — fail-safe denial, documented gap
+  (README #1) — so approval-gated tools don't run. YOLO, the harness's
+  no-restrictions mode that turns the gate off entirely (F3), is
+  opt-in: `KIMCHI_ACP_ARGS="--mode acp --yolo"`.
 - **Project trust (LLM-3628, harness #1266, 2026-09-28)**: headless ACP
   sessions resolve project trust fail-closed — an undecided project with
   trust-requiring resources starts untrusted and silently drops project
@@ -184,15 +186,15 @@ kimchi_acp = KimchiACPProfile(
 1. With kimchi installed + logged in, `hermes model` shows "Kimchi (Harness via ACP)"; setup gates on login status (offers `kimchi login`); model picker lists real model ids (pseudo-entries filtered).
 2. `/model kimchi-acp` runs a turn to completion; text result arrives (after the harness finishes — no incremental streaming); no crash.
 3. Without kimchi installed or logged in, setup reports actionable guidance (`kimchi login` / install), no crash, no Copilot-branded text.
-4. `KIMCHI_ACP_ARGS="--mode acp"` spawn path works (no YOLO) — permission requests are auto-cancelled by the shim (documented gap) rather than crashing.
+4. `KIMCHI_ACP_ARGS="--mode acp --yolo"` (YOLO opt-in) spawn path works — permission requests are suppressed by the harness; without YOLO they are auto-cancelled by the shim (documented gap) rather than crashing.
 5. Error surfaces (spawn failure, timeout, missing CLI) name Kimchi, not Copilot, to the extent the wrapper achieves.
 
 ### Open questions (hypotheses to verify)
 
-- **OQ-B4 - RESOLVED (2026-09-25, decisive probe in `probes/acp_tool_execution_probe.py`, kimchi 1.1.35):** the harness **executes its own tools for real** over ACP in YOLO mode - live `tool_call` session updates observed (write + shell verify), filesystem artifact created and verified. Three-part verdict: (1) harness-side execution is real and survives the shim's text-emission preamble; (2) that execution is **invisible to Hermes** (the shim only forwards text chunks, so Hermes' transcript/UI carry no tool records - this caused the "did you do it?" self-doubt loop observed in e2e); (3) Hermes' forwarded toolset is effectively unused - the harness prefers its own tools. Double-execution (Hermes re-running extracted text blocks) was **not observed** - residual risk noted, not eliminated.
+- **OQ-B4 - RESOLVED (2026-09-25, decisive probe in `probes/acp_tool_execution_probe.py`, kimchi 1.1.35):** the harness **executes its own tools for real** over ACP in YOLO mode (now an opt-in via `KIMCHI_ACP_ARGS="--mode acp --yolo"`) - live `tool_call` session updates observed (write + shell verify), filesystem artifact created and verified. Three-part verdict: (1) harness-side execution is real and survives the shim's text-emission preamble; (2) that execution is **invisible to Hermes** (the shim only forwards text chunks, so Hermes' transcript/UI carry no tool records - this caused the "did you do it?" self-doubt loop observed in e2e); (3) Hermes' forwarded toolset is effectively unused - the harness prefers its own tools. Double-execution (Hermes re-running extracted text blocks) was **not observed** - residual risk noted, not eliminated.
   **ADDRESSED in the plugin (5b5362b):** `KimchiACPClient._handle_server_message` renders one markdown bullet per completed/failed tool (`- ⚙ **web_search** ✓ — excerpt`) into the visible text stream — pending/in_progress churn suppressed, adjacent duplicates collapsed, bullet block closed before narrative — tool activity shows in Hermes' UI AND reaches later turns' flattened context, so the model can verify its own prior work. Residual: text lines, not Hermes' native rich tool cards (upstream improvement); raw tool I/O still not forwarded.
-- **OQ-B3 - RESOLVED empirically:** in a tool-executing YOLO probe, **zero `session/request_permission` traffic** fired - YOLO suppresses tool-permission prompting as designed. The non-tool confirm/elicitation fallback path remains unexercised (residual unknown, low stakes).
-- **OQ-B5** Long YOLO agentic turns vs the client's default 900 s whole-session timeout — do real turns fit? What's the right override? *Learn by: timing real workloads; if insufficient, wrap timeout construction in the subclass.*
+- **OQ-B3 - RESOLVED empirically:** in a tool-executing YOLO probe, **zero `session/request_permission` traffic** fired - YOLO suppresses tool-permission prompting as designed (YOLO is now opt-in; under the prompt-on default the shim auto-cancels requests, README #1). The non-tool confirm/elicitation fallback path remains unexercised (residual unknown, low stakes).
+- **OQ-B5** Long YOLO agentic turns (opt-in via `KIMCHI_ACP_ARGS="--mode acp --yolo"`) vs the client's default 900 s whole-session timeout — do real turns fit? What's the right override? *Learn by: timing real workloads; if insufficient, wrap timeout construction in the subclass.*
 - **OQ-B6** Does `KIMCHI_API_KEY` survive `hermes_subprocess_env`'s secret blocklist into the spawned harness? *Learn by: e2e probe with env key set and empty config.json.*
 
 ## 5. Delivery & process
@@ -206,7 +208,7 @@ kimchi_acp = KimchiACPProfile(
 
 | Decision | Rationale / owner |
 |---|---|
-| YOLO is the default spawn mode for kimchi-acp | User decision 2026-09-25; risk acknowledged: unsupervised tool execution inside the spawned harness |
+| ~~YOLO is the default spawn mode for kimchi-acp~~ → **Reversed 2026-10-06** (catalog review): the default spawn is `--mode acp` with harness permission prompts on (shim cancels them fail-safe); YOLO is opt-in via `KIMCHI_ACP_ARGS="--mode acp --yolo"`. Original rationale (user decision 2026-09-25): unsupervised in-harness tool execution accepted for personal use — reviewer override: too dangerous as a catalog default for gateway/cron contexts |
 | `fallback_models=()` — live catalog only | User decision 2026-09-25; accepted consequence: transient catalog failure = empty picker (OQ-A1 load-bearing) |
 | Reuse Hermes' `CopilotACPClient` + thin branding/error subclass rather than a custom ACP client | Ours: ~300 LOC saved; both reviewers judged reuse mechanically sound (note-level). Gaps (fake streaming, dropped images, cancelled permission requests, branded errors) documented; revisit if OQ-B4 forces it |
 | Close OQ-B1/B2 as verified facts (F14/F15) instead of e2e items | Both reviewers independently verified statically; saves e2e budget |

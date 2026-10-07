@@ -6,8 +6,10 @@ Hermes Agent provider plugins for [Kimchi](https://kimchi.dev):
   Kimchi-served models over the OpenAI-compatible gateway
   (`https://llm.kimchi.dev/openai/v1`).
 - **`kimchi-acp`** — ACP external-process provider. Hermes spawns
-  `kimchi --mode acp --yolo` and the **Kimchi harness itself** serves the
-  turn over stdio (Agent Client Protocol). This is the primary use case.
+  `kimchi --mode acp` (YOLO — no approval prompts — is opt-in via
+  `KIMCHI_ACP_ARGS="--mode acp --yolo"`) and the **Kimchi harness itself**
+  serves the turn over stdio (Agent Client Protocol). This is the primary
+  use case.
 
 Both are user-level plugins: they install into
 `~/.hermes/plugins/model-providers/` and require no changes to Hermes core.
@@ -105,7 +107,7 @@ re-run it after every plugin change.
 | `KIMCHI_API_KEY` | kimchi | API key (checked before `~/.hermes/.env`) |
 | `KIMCHI_BASE_URL` | kimchi | Override the inference gateway base URL — for the plugin this is the **OpenAI base including `/openai/v1`** (e.g. `https://llm.eu.kimchi.dev/openai/v1`; needed for EU/self-hosted keys). **Name collision:** the Kimchi harness reads the same-named variable with *bare* gateway-base semantics (no path — it appends `/openai/v1` itself) and its env override beats its own region config, so a shell-wide export also mis-derives the endpoints of the harness spawned by `kimchi-acp`. For non-US regions prefer the harness's own region selection (`KIMCHI_REGION`, or region choice at `kimchi login`) and scope `KIMCHI_BASE_URL` to where Hermes reads it |
 | `KIMCHI_ACP_COMMAND` | kimchi-acp | Override the spawned binary (default `kimchi`) |
-| `KIMCHI_ACP_ARGS` | kimchi-acp | Override spawn args. **Note: empty string falls back to the default args** (including `--yolo`); to run *without* YOLO set `KIMCHI_ACP_ARGS="--mode acp"` |
+| `KIMCHI_ACP_ARGS` | kimchi-acp | Override spawn args. **Note: empty string falls back to the default args**; YOLO is **opt-in** — set `KIMCHI_ACP_ARGS="--mode acp --yolo"` |
 
 ## Roadmap & known gaps
 
@@ -119,14 +121,17 @@ Hermes' ACP client auto-CANCELS every `session/request_permission` from the
 subagent — there is no human channel in the shim
 (`agent/copilot_acp_client.py::_handle_server_message` answers
 `{"outcome": {"outcome": "cancelled"}}`; comment: "the ACP shim has no
-human channel"). Our workaround is a decision: spawn the harness in YOLO
-mode (`--yolo`, Kimchi's designed no-restrictions permission mode —
-`kimchi-harness/src/modes/acp/server.ts:149-154`), so tool-permission
-prompts never fire. **Consequence: tools inside the harness execute without
-human approval.** Without YOLO (`KIMCHI_ACP_ARGS="--mode acp"`), permission
-requests are silently denied (fail-safe). Proper relay of permission
-prompts into Hermes' approval UI requires upstreaming a generic ACP client
-— future work.
+human channel"). The default spawn therefore **keeps the harness's
+permission prompts on** (`kimchi --mode acp`): tool-permission requests
+are cancelled fail-safe, so approval-gated tools don't run and nothing
+executes silently. YOLO mode (`--yolo`, Kimchi's designed no-restrictions
+permission mode — `kimchi-harness/src/modes/acp/server.ts:149-154`) makes
+harness tools execute **without human approval** and is **opt-in**:
+`KIMCHI_ACP_ARGS="--mode acp --yolo"` (catalog review 2026-10-06 — enable
+it only where unsupervised in-harness execution is acceptable, not in
+shared gateway/cron contexts). Proper relay of permission prompts into
+Hermes' approval UI requires upstreaming a generic ACP client — future
+work.
 
 ### 2. In-session confirms/elicitation degrade to "no" (Kimchi limitation × Hermes limitation)
 
@@ -136,7 +141,7 @@ advertise elicitation support
 (`kimchi-harness/src/modes/acp/acp-ui-context.test.ts:188-229`). Hermes'
 shim neither advertises elicitation nor answers these requests (it
 cancels — see #1), so such confirms resolve to "no"/cancelled (fail-safe).
-Under YOLO this should only affect non-tool confirms; a tool-executing probe
+Under YOLO (opt-in) this should only affect non-tool confirms; a tool-executing probe
 (2026-09-25) saw zero confirm/permission traffic (SPEC §OQ-B3). The non-tool
 confirm fallback path remains unexercised.
 
@@ -160,8 +165,8 @@ is unaffected.
 ### 5. Tool routing — RESOLVED (2026-09-25, probes/acp_tool_execution_probe.py)
 
 The Kimchi harness **executes its own tools for real** when driven over
-ACP in YOLO mode (probe: live tool_call updates, filesystem artifact
-verified). Consequences, in order of importance:
+ACP in YOLO mode (opt-in; probe: live tool_call updates, filesystem
+artifact verified). Consequences, in order of importance:
 
 1. **Harness-side execution is invisible to Hermes by default** — the
    shim forwards only text. **Addressed in this plugin** (commit 5b5362b):
@@ -172,7 +177,7 @@ verified). Consequences, in order of importance:
    verify its own prior work. Residual: plain text lines, not Hermes'
    native tool cards (upstreaming a richer bridge remains future work).
 2. **Hermes' forwarded toolset is effectively unused** — the harness
-   prefers its native tools under YOLO.
+   prefers its native tools (observed under YOLO).
 3. **Double-execution was NOT observed** — the model narrates results
    instead of emitting re-runnable tool-call blocks; residual risk noted.
 
@@ -236,7 +241,9 @@ trust handling into Hermes' ACP shim — same bucket as #1.
   model selection via config options, session-default placeholder, and
   harness-native tool execution confirmed by probe (OQ-B3/B4 resolved;
   see roadmap #5). Verified in the TUI and the Desktop app (the latter
-  after the spawn-target self-heal, commit e337a1a).
+  after the spawn-target self-heal, commit e337a1a). Spawn default
+  revised 2026-10-06 (catalog review): prompts-on `--mode acp`; YOLO
+  now opt-in (roadmap #1).
 - Ops note: `./install.sh` is a plain copy into `~/.hermes` — **re-run it
   after every plugin change**; Hermes does not watch the plugin files (a
   stale copy caused the 0-models incident on 2026-09-25).

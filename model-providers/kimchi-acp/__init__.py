@@ -1,9 +1,10 @@
 """Kimchi harness ACP provider profile (external process over stdio).
 
-Layer 2: Hermes spawns `kimchi --mode acp --yolo` — YOLO is the user-approved
-default permission mode (no approval prompts inside the harness). The escape
-hatch to run WITHOUT YOLO is `KIMCHI_ACP_ARGS="--mode acp"`; note that an
-EMPTY env var falls back to `process_args` below rather than clearing args.
+Layer 2: Hermes spawns `kimchi --mode acp` — the harness keeps its own
+permission prompts, which Hermes' shim fail-safe cancels (monorepo README
+roadmap #1). YOLO — no approval prompts inside the harness — is opt-in:
+`KIMCHI_ACP_ARGS="--mode acp --yolo"`; note that an EMPTY env var falls
+back to `process_args` below rather than clearing args.
 
 The subprocess owns its own auth (Kimchi's credential store); Hermes never
 handles an API key on this path.
@@ -169,7 +170,7 @@ class _KimchiACPClientMixin:
         if env_args:
             self._acp_args = shlex.split(env_args)
         elif not args or tuple(args) == ("--acp", "--stdio"):
-            self._acp_args = ["--mode", "acp", "--yolo"]
+            self._acp_args = ["--mode", "acp"]
         if (getattr(self, "base_url", "") or "") == "acp://copilot":
             self.base_url = "acp://kimchi"
 
@@ -297,7 +298,7 @@ def _kimchi_client_class():
 
 
 class KimchiACPProfile(ProviderProfile):
-    """Kimchi harness over ACP stdio — `kimchi --mode acp --yolo`."""
+    """Kimchi harness over ACP stdio — `kimchi --mode acp`."""
 
     def create_client(self, **client_kwargs):
         return _kimchi_client_class()(**client_kwargs)
@@ -366,9 +367,9 @@ kimchi_acp = KimchiACPProfile(
     # -selection request. Only surfaces when the live probe fails otherwise.
     fallback_models=("kimchi-acp",),
     # How to launch the harness; KIMCHI_ACP_ARGS lets users override the argv
-    # tail (e.g. drop --yolo). See module docstring for the empty-string trap.
+    # tail (e.g. add --yolo). See module docstring for the empty-string trap.
     process_command="kimchi",
-    process_args=("--mode", "acp", "--yolo"),
+    process_args=("--mode", "acp"),
     process_command_env_vars=("KIMCHI_ACP_COMMAND",),
     process_args_env_var="KIMCHI_ACP_ARGS",
 )

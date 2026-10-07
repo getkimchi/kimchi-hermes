@@ -35,8 +35,9 @@ Please correct us if the policy changed.
   catalog is discovered live from Kimchi's metadata endpoint
   (`/v1/models/metadata?include_in_cli=true` — ids under `slug`, retired
   models filtered); no hardcoded fallback list.
-- `kimchi-acp` — external-process provider spawning `kimchi --mode acp
-  --yolo` (default; `KIMCHI_ACP_ARGS` escape hatch). The subprocess owns its
+- `kimchi-acp` — external-process provider spawning `kimchi --mode acp`
+  (permission prompts stay on; YOLO opt-in via `KIMCHI_ACP_ARGS`). The
+  subprocess owns its
   own auth — Hermes never handles a key on this path. Model selection goes
   through the standard `session/set_config_option` flow; a
   `kimchi-acp` placeholder model id means "harness session default".

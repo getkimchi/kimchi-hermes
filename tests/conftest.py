@@ -150,7 +150,7 @@ def fake_acp(monkeypatch):
         "base_url": "acp://kimchi",
         "api_key": None,
         "command": "kimchi",
-        "args": ("--mode", "acp", "--yolo"),
+        "args": ("--mode", "acp"),
     }
 
     hermes_cli_mod = types.ModuleType("hermes_cli")

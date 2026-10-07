@@ -16,11 +16,11 @@ def profile(registry, fake_acp):
 
 def test_create_client_returns_kimchi_branded_subclass(profile):
     client = profile.create_client(
-        api_key=None, base_url="acp://kimchi", command="kimchi", args=("--mode", "acp", "--yolo")
+        api_key=None, base_url="acp://kimchi", command="kimchi", args=("--mode", "acp")
     )
     assert type(client).__name__ == "KimchiACPClient"
     assert client.kwargs["base_url"] == "acp://kimchi"
-    assert client.kwargs["args"] == ("--mode", "acp", "--yolo")
+    assert client.kwargs["args"] == ("--mode", "acp")
 
 
 def test_spawn_error_rebranded(profile):
@@ -106,7 +106,9 @@ def test_client_self_heals_shim_copilot_defaults(registry, fake_acp, monkeypatch
     module = load_plugin("kimchi-acp")
     client = module.KimchiACPClient(api_key="x", base_url="acp://copilot")
     assert client._acp_command == "kimchi"
-    assert tuple(client._acp_args) == ("--mode", "acp", "--yolo")
+    # Default spawn keeps harness permission prompts — --yolo is never
+    # injected unless the user asks for it.
+    assert tuple(client._acp_args) == ("--mode", "acp")
     assert client.base_url == "acp://kimchi"
 
 
@@ -119,11 +121,19 @@ def test_client_explicit_command_respected(registry, fake_acp):
 
 def test_client_env_args_respected_in_fallback(registry, fake_acp, monkeypatch):
     monkeypatch.delenv("KIMCHI_ACP_COMMAND", raising=False)
-    monkeypatch.setenv("KIMCHI_ACP_ARGS", "--mode acp")  # documented YOLO escape hatch
+    monkeypatch.setenv("KIMCHI_ACP_ARGS", "--mode acp --yolo")  # documented YOLO opt-in
     module = load_plugin("kimchi-acp")
     client = module.KimchiACPClient()
     assert client._acp_command == "kimchi"
-    assert list(client._acp_args) == ["--mode", "acp"]
+    assert list(client._acp_args) == ["--mode", "acp", "--yolo"]
+
+
+def test_client_explicit_args_pass_through_untouched(registry, fake_acp, monkeypatch):
+    """A caller-set argv is honoured verbatim — --yolo arrives only if asked for."""
+    monkeypatch.delenv("KIMCHI_ACP_ARGS", raising=False)
+    module = load_plugin("kimchi-acp")
+    client = module.KimchiACPClient(command="kimchi", args=("--mode", "acp", "--yolo"))
+    assert list(client._acp_args) == ["--mode", "acp", "--yolo"]
 
 
 def test_create_client_self_heals_after_transient_shim_failure(registry, monkeypatch):
@@ -160,12 +170,12 @@ def test_create_client_self_heals_after_transient_shim_failure(registry, monkeyp
     monkeypatch.setitem(sys.modules, "agent", agent_mod)
     monkeypatch.setitem(sys.modules, "agent.copilot_acp_client", client_mod)
 
-    client = module.kimchi_acp.create_client(command="kimchi", args=("--mode", "acp", "--yolo"))
+    client = module.kimchi_acp.create_client(command="kimchi", args=("--mode", "acp"))
     assert type(client).__name__ == "KimchiACPClient"
     assert type(client).__mro__[2].__name__ == "FakeCopilotACPClient"
     # The mixin overrides still apply on the lazily built class.
     assert client._acp_command == "kimchi"
-    assert tuple(client._acp_args) == ("--mode", "acp", "--yolo")
+    assert tuple(client._acp_args) == ("--mode", "acp")
     assert client.base_url == "acp://kimchi"
 
 
@@ -238,6 +248,7 @@ def test_fetch_models_swallows_credential_errors(monkeypatch, registry, fake_acp
 
 
 def test_setup_status_logged_in_via_config(registry, fake_acp, monkeypatch, tmp_path):
+    monkeypatch.delenv("KIMCHI_ACP_COMMAND", raising=False)  # Desktop export would leak in
     config = tmp_path / "config.json"
     config.write_text('{"apiKey": "sk-secret"}', encoding="utf-8")
     monkeypatch.setenv("KIMCHI_CONFIG_PATH", str(config))
@@ -255,6 +266,7 @@ def test_setup_status_logged_in_via_config(registry, fake_acp, monkeypatch, tmp_
 
 
 def test_setup_status_not_logged_in(registry, fake_acp, monkeypatch, tmp_path):
+    monkeypatch.delenv("KIMCHI_ACP_COMMAND", raising=False)  # Desktop export would leak in
     monkeypatch.setenv("KIMCHI_CONFIG_PATH", str(tmp_path / "missing.json"))
     monkeypatch.delenv("KIMCHI_API_KEY", raising=False)
     monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/kimchi" if name == "kimchi" else None)
@@ -266,6 +278,7 @@ def test_setup_status_not_logged_in(registry, fake_acp, monkeypatch, tmp_path):
 
 
 def test_setup_status_cli_missing(registry, fake_acp, monkeypatch, tmp_path):
+    monkeypatch.delenv("KIMCHI_ACP_COMMAND", raising=False)  # Desktop export would leak in
     monkeypatch.setenv("KIMCHI_CONFIG_PATH", str(tmp_path / "missing.json"))
     monkeypatch.delenv("KIMCHI_API_KEY", raising=False)
     monkeypatch.setattr("shutil.which", lambda name: None)
@@ -277,6 +290,7 @@ def test_setup_status_cli_missing(registry, fake_acp, monkeypatch, tmp_path):
 
 
 def test_env_key_counts_as_logged_in(registry, fake_acp, monkeypatch, tmp_path):
+    monkeypatch.delenv("KIMCHI_ACP_COMMAND", raising=False)  # Desktop export would leak in
     monkeypatch.setenv("KIMCHI_CONFIG_PATH", str(tmp_path / "missing.json"))
     monkeypatch.setenv("KIMCHI_API_KEY", "sk-env")
     monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/kimchi" if name == "kimchi" else None)

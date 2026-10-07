@@ -94,9 +94,10 @@ at the bottom of this file.
   `llm.kimchi.dev` with the user's API key (Hermes' credentialed-URL
   wrapper); inference goes through Hermes core's own client. No
   credentials stored by the plugin.
-- `kimchi-acp-provider`: spawns `kimchi --mode acp --yolo` per turn —
-  harness tools run without approval prompts (fail-safe cancelled
-  without YOLO); reads the Kimchi CLI's own
+- `kimchi-acp-provider`: spawns `kimchi --mode acp` per turn — the
+  harness keeps its own permission prompts (shim cancels them fail-safe;
+  YOLO opt-in via `KIMCHI_ACP_ARGS="--mode acp --yolo"`); reads the
+  Kimchi CLI's own
   `~/.config/kimchi/config.json` (key **presence** only) for setup
   status; the subprocess owns auth — no key is shared with Hermes;
   renders completed tool calls as bullets in the reply.

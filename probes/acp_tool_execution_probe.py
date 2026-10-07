@@ -1,6 +1,8 @@
 """Manual probe: does the Kimchi harness execute its own tools over ACP?
 
-Drives `kimchi --mode acp --yolo` the same way the plugin (via Hermes'
+Drives `kimchi --mode acp --yolo` (YOLO opt-in — mirrors a user who has
+set KIMCHI_ACP_ARGS="--mode acp --yolo"; the plugin default keeps
+permission prompts on) the same way the plugin (via Hermes'
 CopilotACPClient shim) does: initialize -> session/new -> session/prompt,
 then checks the filesystem artifact.
 
