@@ -8,15 +8,17 @@ the former "Path B". The placement question
 was answered by upstream's own repo state — evidence below. Full
 decision log lives in [`SPEC.md`](SPEC.md).
 
-**Status (2026-10-05): SUBMITTED** — catalog PRs
+**Status (2026-10-07): MERGED** — catalog PRs
 [#133165](https://github.com/NousResearch/hermes-agent/pull/133165)
-(`kimchi-provider`) and
+(`kimchi-provider`, merged 2026-10-06) and
 [#133166](https://github.com/NousResearch/hermes-agent/pull/133166)
-(`kimchi-acp-provider`) are open; `main` and tag `v1.0.0` are pushed;
+(`kimchi-acp-provider`, merged 2026-10-07 as `0c7f6468`) are both in;
+`main` and tag `v1.0.0` are pushed;
 the loop on #126026 is closed
 ([comment](https://github.com/NousResearch/hermes-agent/issues/126026#issuecomment-5989285234)).
-Remaining: watch the catalog validation actions, respond to review,
-promote in Discord.
+Post-merge: review fix applied before merge — `--yolo` spawn made
+opt-in per review (kimchi-hermes `d6ffe628`, the pinned SHA).
+Remaining: promote in Discord.
 
 ## Why standalone — the evidence (upstream `main` @ `c2346276`, 2026-10-05)
 
