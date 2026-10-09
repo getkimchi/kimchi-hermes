@@ -13,7 +13,7 @@ route `CONTRIBUTING.md` documents for third-party product integrations
 
 | Plugin | PR | Pinned SHA |
 |---|---|---|
-| `kimchi-provider` | [#133165](https://github.com/NousResearch/hermes-agent/pull/133165) (merged 2026-10-06) | `f3da18f16dff7220c909227f687b5885ab729f66` — **SHA-bump PR pending**: `94cf2c3b` ships UA attribution + `KIMCHI_BASE_URL` doc fix, `version: 1.1.0` |
+| `kimchi-provider` | [#133165](https://github.com/NousResearch/hermes-agent/pull/133165) (merged 2026-10-06); bump PR [#135599](https://github.com/NousResearch/hermes-agent/pull/135599) (`v1.1.0`: attribution UA, `KIMCHI_BASE_URL` doc) | `0fcca81491ce97449d615754c60f89eff7696a93` |
 | `kimchi-acp-provider` | [#133166](https://github.com/NousResearch/hermes-agent/pull/133166) (merged 2026-10-07 as `0c7f6468`) | `d6ffe62876a44605585eaf5c2e3d5214b9e10cb8` — the review fix that made `--yolo` opt-in |
 
 The merged `kimchi-acp-provider` description was expanded by the
